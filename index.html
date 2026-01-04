@@ -48,6 +48,10 @@
         const status = document.getElementById('status');
         const instr = document.getElementById('instr');
 
+        // Variables for custom backtick logic
+        let tickCount = 0;
+        let tickTimeout = null;
+
         // Bluetooth Connection
         document.getElementById('connectBtn').onclick = async () => {
             try {
@@ -64,7 +68,7 @@
             } catch (e) { status.innerText = "Error: " + e.message; }
         };
 
-        // Pointer Lock (ESC to exit)
+        // Pointer Lock
         card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
 
         document.addEventListener('pointerlockchange', () => {
@@ -83,7 +87,7 @@
         // Mouse Clicks
         document.addEventListener('mousedown', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                const btnMap = [1, 2, 4]; // Left, Middle, Right
+                const btnMap = [1, 2, 4];
                 mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
@@ -101,26 +105,47 @@
             }
         }, { passive: false });
 
-        // Keyboard Logic (ASCII + Special + Media + ESC Protection)
+        // Keyboard Logic
         document.addEventListener('keydown', e => {
             if (document.pointerLockElement === card && keyChar) {
-                // IMPORTANT: Let Escape key escape the Pointer Lock
+                
+                // Special handling for Backtick `
+                if (e.key === "`") {
+                    e.preventDefault();
+                    tickCount++;
+                    
+                    // Clear any pending single-tick or double-tick timers
+                    clearTimeout(tickTimeout);
+
+                    if (tickCount === 3) {
+                        // Send ESC key (Special mode 1, code 27)
+                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1]));
+                        tickCount = 0;
+                    } else {
+                        // Wait to see if another backtick arrives
+                        tickTimeout = setTimeout(() => {
+                            if (tickCount === 1) {
+                                // Only one tick happened in 500ms, send it as a normal key
+                                keyChar.writeValueWithoutResponse(new Uint8Array([107, 96, 0]));
+                            }
+                            // Reset count if we reach here (1 or 2 ticks occurred)
+                            tickCount = 0;
+                        }, 500); 
+                    }
+                    return;
+                }
+
                 if (e.key === "Escape") return; 
 
                 e.preventDefault();
 
                 let val;
-                let mode = 0; // 0 = Char/ASCII, 1 = Navigation/Special, 2 = Media
+                let mode = 0; 
 
-                // 1. Media Keys
                 const mediaKeys = {
-                    "AudioVolumeUp": 1,
-                    "AudioVolumeDown": 2,
-                    "AudioVolumeMute": 3,
-                    "MediaPlayPause": 4
+                    "AudioVolumeUp": 1, "AudioVolumeDown": 2, "AudioVolumeMute": 3, "MediaPlayPause": 4
                 };
 
-                // 2. Navigation/Function Keys
                 const navKeys = {
                     "Backspace": 8, "Tab": 9, "Enter": 13, "Delete": 46,
                     "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40,
@@ -135,14 +160,12 @@
                     val = navKeys[e.key];
                     mode = 1;
                 } else if (e.key.length === 1) {
-                    // Standard printable characters (a, A, !, @, ~, etc.)
                     val = e.key.charCodeAt(0);
                     mode = 0;
                 } else {
-                    return; // Ignore modifiers like Shift/Ctrl on their own
+                    return;
                 }
 
-                // Send to XIAO: ['k', val, mode]
                 keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
             }
         });
