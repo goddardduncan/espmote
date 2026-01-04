@@ -43,6 +43,15 @@
 
         let escCount = 0;
         let escTimer = null;
+        
+        // STABILITY QUEUE: Prevents disconnects during fast typing
+        let writeQueue = Promise.resolve();
+        const safeWrite = (char, data) => {
+            writeQueue = writeQueue.then(() => 
+                char.writeValueWithoutResponse(data)
+                .catch(e => console.log("Write throttled/skipped"))
+            );
+        };
 
         document.getElementById('connectBtn').onclick = async () => {
             try {
@@ -65,11 +74,12 @@
             const locked = document.pointerLockElement === card;
             card.classList.toggle('active', locked);
             instr.innerHTML = locked ? "Controlling PC<br><small>ESC 3x to exit</small>" : "Tap to Start Control";
-            escCount = 0; // Reset count when entering/exiting
+            escCount = 0;
         });
 
         document.addEventListener('mousemove', e => {
             if (document.pointerLockElement === card && mouseChar) {
+                // Mouse moves are very frequent, writeWithoutResponse is best here
                 mouseChar.writeValueWithoutResponse(new Int8Array([109, e.movementX, e.movementY]));
             }
         });
@@ -77,19 +87,19 @@
         document.addEventListener('mousedown', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 const btnMap = [1, 2, 4];
-                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
+                safeWrite(mouseChar, new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
         document.addEventListener('mouseup', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 const btnMap = [1, 2, 4];
-                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 0]));
+                safeWrite(mouseChar, new Uint8Array([99, btnMap[e.button], 0]));
             }
         });
 
         document.addEventListener('wheel', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                mouseChar.writeValueWithoutResponse(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+                safeWrite(mouseChar, new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
             }
         }, { passive: false });
 
@@ -123,7 +133,8 @@
                 else if (e.key.length === 1) { val = e.key.charCodeAt(0); mode = 0; }
                 else { return; }
 
-                keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
+                // Use the stability queue for keys
+                safeWrite(keyChar, new Uint8Array([107, val, mode]));
             }
         });
     </script>
