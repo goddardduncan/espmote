@@ -6,28 +6,39 @@
     <title>XIAO Chromeo Remote</title>
     <style>
         :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
-        body { background-color: var(--bg-gray); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
+        body { background-color: var(--bg-gray); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
+        
         .header { position: absolute; top: 5%; text-align: center; }
         #status { font-size: 14px; color: #5F6368; margin-top: 5px; }
+
         #trackpad-card {
             background: var(--card-bg); width: 85vw; max-width: 450px; height: 55vh; border-radius: 28px; 
             border: 1px solid #DADCE0; box-shadow: 0 1px 3px rgba(60,64,67,0.3);
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            cursor: crosshair; transition: all 0.3s ease;
+            cursor: crosshair; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        #trackpad-card.active { border: 2px solid var(--google-blue); box-shadow: 0 8px 24px rgba(66,133,244,0.2); }
-        .btn-connect { background: var(--google-blue); color: white; border: none; padding: 12px 24px; border-radius: 24px; font-weight: 500; cursor: pointer; margin-bottom: 20px; }
+        
+        #trackpad-card.active { border: 2px solid var(--google-blue); box-shadow: 0 8px 24px rgba(66,133,244,0.2); transform: scale(1.02); }
+        
+        .btn-connect { 
+            background: var(--google-blue); color: white; border: none; padding: 12px 24px; 
+            border-radius: 24px; font-weight: 500; cursor: pointer; margin-bottom: 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
         .instruction { color: var(--google-blue); font-weight: 500; text-align: center; pointer-events: none; }
+        small { color: #5F6368; font-weight: 400; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>XIAO Remote</h1>
-        <div id="status">Disconnected</div>
+        <div id="status">Bluetooth Disconnected</div>
     </div>
-    <button id="connectBtn" class="btn-connect">Connect</button>
+
+    <button id="connectBtn" class="btn-connect">Connect to Device</button>
+
     <div id="trackpad-card">
-        <div class="instruction" id="instr">Tap to Start</div>
+        <div class="instruction" id="instr">Tap to Start Control</div>
     </div>
 
     <script>
@@ -37,17 +48,7 @@
         const status = document.getElementById('status');
         const instr = document.getElementById('instr');
 
-        let escCount = 0;
-        let escTimer = null;
-        
-        // Stability Queue to prevent BLE disconnects
-        let writeQueue = Promise.resolve();
-        const safeWrite = (char, data) => {
-            writeQueue = writeQueue.then(() => 
-                char.writeValueWithoutResponse(data).catch(() => {})
-            );
-        };
-
+        // Bluetooth Connection
         document.getElementById('connectBtn').onclick = async () => {
             try {
                 const device = await navigator.bluetooth.requestDevice({
@@ -58,60 +59,91 @@
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 mouseChar = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
                 keyChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
-                status.innerText = "Connected";
+                status.innerText = "Connected to " + device.name;
                 document.getElementById('connectBtn').style.display = 'none';
             } catch (e) { status.innerText = "Error: " + e.message; }
         };
 
+        // Pointer Lock (ESC to exit)
         card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
 
         document.addEventListener('pointerlockchange', () => {
             const locked = document.pointerLockElement === card;
             card.classList.toggle('active', locked);
-            instr.innerHTML = locked ? "Controlling PC<br><small>ESC 3x to exit</small>" : "Tap to Start";
-            escCount = 0;
+            instr.innerHTML = locked ? "Controlling PC<br><small>ESC to exit</small>" : "Tap to Start Control";
         });
 
+        // Mouse Move
         document.addEventListener('mousemove', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 mouseChar.writeValueWithoutResponse(new Int8Array([109, e.movementX, e.movementY]));
             }
         });
 
+        // Mouse Clicks
         document.addEventListener('mousedown', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                const btnMap = [1, 2, 4];
-                safeWrite(mouseChar, new Uint8Array([99, btnMap[e.button], 1]));
+                const btnMap = [1, 2, 4]; // Left, Middle, Right
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
-
         document.addEventListener('mouseup', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 const btnMap = [1, 2, 4];
-                safeWrite(mouseChar, new Uint8Array([99, btnMap[e.button], 0]));
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 0]));
             }
         });
 
+        // Scrolling
+        document.addEventListener('wheel', e => {
+            if (document.pointerLockElement === card && mouseChar) {
+                mouseChar.writeValueWithoutResponse(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+            }
+        }, { passive: false });
+
+        // Keyboard Logic (ASCII + Special + Media + ESC Protection)
         document.addEventListener('keydown', e => {
             if (document.pointerLockElement === card && keyChar) {
-                if (e.key === "Escape") {
-                    escCount++;
-                    clearTimeout(escTimer);
-                    escTimer = setTimeout(() => { escCount = 0; }, 2000);
-                    if (escCount >= 3) { document.exitPointerLock(); return; }
-                } else { escCount = 0; }
+                // IMPORTANT: Let Escape key escape the Pointer Lock
+                if (e.key === "Escape") return; 
 
                 e.preventDefault();
-                let val, mode = 0;
-                const mediaKeys = { "AudioVolumeUp": 1, "AudioVolumeDown": 2, "AudioVolumeMute": 3, "MediaPlayPause": 4 };
-                const navKeys = { "Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "Delete": 46, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "F1": 112, "F2": 113, "F3": 114, "F4": 115, "F5": 116, "F6": 117, "F7": 118, "F8": 119, "F9": 120, "F10": 121, "F11": 122, "F12": 123 };
 
-                if (mediaKeys[e.key]) { val = mediaKeys[e.key]; mode = 2; }
-                else if (navKeys[e.key]) { val = navKeys[e.key]; mode = 1; }
-                else if (e.key.length === 1) { val = e.key.charCodeAt(0); mode = 0; }
-                else return;
+                let val;
+                let mode = 0; // 0 = Char/ASCII, 1 = Navigation/Special, 2 = Media
 
-                safeWrite(keyChar, new Uint8Array([107, val, mode]));
+                // 1. Media Keys
+                const mediaKeys = {
+                    "AudioVolumeUp": 1,
+                    "AudioVolumeDown": 2,
+                    "AudioVolumeMute": 3,
+                    "MediaPlayPause": 4
+                };
+
+                // 2. Navigation/Function Keys
+                const navKeys = {
+                    "Backspace": 8, "Tab": 9, "Enter": 13, "Delete": 46,
+                    "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40,
+                    "F1": 112, "F2": 113, "F3": 114, "F4": 115, "F5": 116, "F6": 117,
+                    "F7": 118, "F8": 119, "F9": 120, "F10": 121, "F11": 122, "F12": 123
+                };
+
+                if (mediaKeys[e.key]) {
+                    val = mediaKeys[e.key];
+                    mode = 2;
+                } else if (navKeys[e.key]) {
+                    val = navKeys[e.key];
+                    mode = 1;
+                } else if (e.key.length === 1) {
+                    // Standard printable characters (a, A, !, @, ~, etc.)
+                    val = e.key.charCodeAt(0);
+                    mode = 0;
+                } else {
+                    return; // Ignore modifiers like Shift/Ctrl on their own
+                }
+
+                // Send to XIAO: ['k', val, mode]
+                keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
             }
         });
     </script>
