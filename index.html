@@ -3,23 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XIAO Chromeo Remote</title>
+    <title>XIAO Remote</title>
     <style>
         :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
         body { background-color: var(--bg-gray); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
-        
         .header { position: absolute; top: 5%; text-align: center; }
         #status { font-size: 14px; color: #5F6368; margin-top: 5px; }
-
         #trackpad-card {
             background: var(--card-bg); width: 85vw; max-width: 450px; height: 55vh; border-radius: 28px; 
             border: 1px solid #DADCE0; box-shadow: 0 1px 3px rgba(60,64,67,0.3);
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
             cursor: crosshair; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
         #trackpad-card.active { border: 2px solid var(--google-blue); box-shadow: 0 8px 24px rgba(66,133,244,0.2); transform: scale(1.02); }
-        
         .btn-connect { 
             background: var(--google-blue); color: white; border: none; padding: 12px 24px; 
             border-radius: 24px; font-weight: 500; cursor: pointer; margin-bottom: 20px;
@@ -71,17 +67,17 @@
             instr.innerHTML = locked ? "Controlling PC<br><small>ESC to exit</small>" : "Tap to Start Control";
         });
 
-        // Mouse Move
+        // Mouse Movement
         document.addEventListener('mousemove', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 mouseChar.writeValueWithoutResponse(new Int8Array([109, e.movementX, e.movementY]));
             }
         });
 
-        // Mouse Clicks (Left=0, Middle=1, Right=2)
+        // Mouse Clicks
         document.addEventListener('mousedown', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                const btnMap = [1, 2, 4]; // Map to HID Left=1, Middle=2, Right=4
+                const btnMap = [1, 2, 4]; 
                 mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
@@ -99,12 +95,21 @@
             }
         }, { passive: false });
 
-        // Keyboard
+        // Keyboard with Modifiers and ESC trap
         document.addEventListener('keydown', e => {
-            if (document.pointerLockElement === card && keyChar && e.key !== "Escape") {
+            if (document.pointerLockElement === card && keyChar) {
+                // If ESC is pressed, do NOT preventDefault. Let browser break Pointer Lock.
+                if (e.key === "Escape") return; 
+
                 e.preventDefault();
-                // We send the 'keyCode' or 'which' as it's more stable for raw HID mapping
-                keyChar.writeValueWithoutResponse(new Uint8Array([107, e.keyCode]));
+
+                let modifiers = 0;
+                if (e.shiftKey) modifiers |= 1;
+                if (e.ctrlKey)  modifiers |= 2;
+                if (e.altKey)   modifiers |= 4;
+                if (e.metaKey)  modifiers |= 8;
+
+                keyChar.writeValueWithoutResponse(new Uint8Array([107, e.keyCode, modifiers]));
             }
         });
     </script>
