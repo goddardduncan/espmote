@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XIAO Remote</title>
+    <title>XIAO Remote Pro</title>
     <style>
         :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
         body { background-color: var(--bg-gray); font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
@@ -36,12 +36,7 @@
         #ota-controls { display: none; background: #fff; padding: 15px; border-radius: 16px; border: 1px solid #dadce0; flex-direction: column; gap: 8px; }
         
         #fileList { max-height: 150px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #eee; border-radius: 8px; }
-        .file-item { 
-            text-align: left; font-size: 13px; padding: 12px; cursor: pointer; 
-            background: #f8f9fa; border-bottom: 1px solid #eee; transition: 0.2s;
-        }
-        .file-item:last-child { border-bottom: none; }
-        .file-item:hover { background: #eef2f7; }
+        .file-item { text-align: left; font-size: 13px; padding: 12px; cursor: pointer; background: #f8f9fa; border-bottom: 1px solid #eee; transition: 0.2s; }
         .file-item.selected { background: #e8f0fe; font-weight: bold; color: var(--google-blue); border-left: 4px solid var(--google-blue); }
 
         .progress-bar { width: 100%; height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; margin: 10px 0; display: none; }
@@ -75,7 +70,6 @@
     </div>
 
     <script>
-        // --- GITHUB CONFIGURATION ---
         const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
         
         let mouseChar, keyChar, otaChar, selectedFileArray = null;
@@ -91,44 +85,30 @@
         const otaStatus = document.getElementById('otaStatus');
         const fileList = document.getElementById('fileList');
 
-        // 1. Fetch File List from GitHub
         async function loadGitHubFiles() {
             try {
                 const response = await fetch(REPO_API_URL);
                 const files = await response.json();
                 fileList.innerHTML = "";
-
-                const binFiles = files.filter(f => f.name.endsWith('.bin'));
-
-                if (binFiles.length === 0) {
-                    fileList.innerText = "No .bin files found in /firmware";
-                    return;
-                }
-
-                binFiles.forEach(file => {
+                files.filter(f => f.name.endsWith('.bin')).forEach(file => {
                     const div = document.createElement('div');
                     div.className = "file-item";
                     div.innerText = "📦 " + file.name;
                     div.onclick = async () => {
                         otaStatus.innerText = "Downloading " + file.name + "...";
-                        try {
-                            const res = await fetch(file.download_url);
-                            const blob = await res.blob();
-                            selectedFileArray = new Uint8Array(await blob.arrayBuffer());
-                            otaStatus.innerText = "Ready: " + file.name;
-                            document.getElementById('updateBtn').disabled = false;
-                            Array.from(fileList.children).forEach(c => c.classList.remove('selected'));
-                            div.classList.add('selected');
-                        } catch(e) { otaStatus.innerText = "Download error."; }
+                        const res = await fetch(file.download_url);
+                        const blob = await res.blob();
+                        selectedFileArray = new Uint8Array(await blob.arrayBuffer());
+                        otaStatus.innerText = "Ready: " + file.name;
+                        document.getElementById('updateBtn').disabled = false;
+                        Array.from(fileList.children).forEach(c => c.classList.remove('selected'));
+                        div.classList.add('selected');
                     };
                     fileList.appendChild(div);
                 });
-            } catch (e) {
-                fileList.innerText = "Error loading GitHub folder.";
-            }
+            } catch (e) { fileList.innerText = "Error loading GitHub."; }
         }
 
-        // 2. Bluetooth Connection
         document.getElementById('connectBtn').onclick = async () => {
             try {
                 const device = await navigator.bluetooth.requestDevice({
@@ -140,17 +120,14 @@
                 mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
                 keyChar   = await service.getCharacteristic(UUIDS.KEY);
                 otaChar   = await service.getCharacteristic(UUIDS.OTA);
-
                 status.innerText = "Connected: " + device.name;
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('ota-panel').style.display = 'block';
                 loadGitHubFiles();
-
                 device.addEventListener('gattserverdisconnected', () => { location.reload(); });
             } catch (e) { status.innerText = "Error: " + e.message; }
         };
 
-        // 3. OTA Flash Logic
         document.getElementById('updateBtn').onclick = async () => {
             if (!selectedFileArray || !otaChar) return;
             const pBar = document.getElementById('pBar');
@@ -159,7 +136,7 @@
             document.getElementById('updateBtn').disabled = true;
 
             const beginMsg = new Uint8Array(5);
-            beginMsg[0] = 66; // 'B'
+            beginMsg[0] = 66; 
             new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
             await otaChar.writeValue(beginMsg);
 
@@ -167,20 +144,21 @@
             for (let i = 0; i < selectedFileArray.length; i += chunkSize) {
                 const chunk = selectedFileArray.slice(i, i + chunkSize);
                 const dataMsg = new Uint8Array(chunk.length + 1);
-                dataMsg[0] = 68; // 'D'
+                dataMsg[0] = 68; 
                 dataMsg.set(chunk, 1);
                 await otaChar.writeValue(dataMsg);
                 let pct = Math.round((i / selectedFileArray.length) * 100);
                 pFill.style.width = pct + "%";
                 otaStatus.innerText = `Updating: ${pct}%`;
             }
-            await otaChar.writeValue(new Uint8Array([69])); // 'E'
+            await otaChar.writeValue(new Uint8Array([69])); 
             otaStatus.innerText = "Success! Device rebooting...";
         };
 
-        // 4. Mouse & Triple-Tick Keyboard Logic
+        // --- RESTORED MOUSE & KEYBOARD LOGIC ---
         let tickCount = 0, tickTime;
         card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
+
         document.addEventListener('pointerlockchange', () => {
             const locked = document.pointerLockElement === card;
             card.classList.toggle('active', locked);
@@ -193,6 +171,27 @@
             }
         });
 
+        // RESTORED: Full button mapping for Right (2) and Middle (4) clicks
+        document.addEventListener('mousedown', e => {
+            if (document.pointerLockElement === card && mouseChar) {
+                const btnMap = [1, 4, 2]; // Left=0->1, Middle=1->4, Right=2->2
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
+            }
+        });
+        document.addEventListener('mouseup', e => {
+            if (document.pointerLockElement === card && mouseChar) {
+                const btnMap = [1, 4, 2];
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 0]));
+            }
+        });
+
+        // RESTORED: Wheel scrolling
+        document.addEventListener('wheel', e => {
+            if (document.pointerLockElement === card && mouseChar) {
+                mouseChar.writeValueWithoutResponse(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+            }
+        }, { passive: false });
+
         document.addEventListener('keydown', e => {
             if (document.pointerLockElement === card && keyChar) {
                 if (e.key === "`") {
@@ -200,7 +199,7 @@
                     tickCount++;
                     clearTimeout(tickTime);
                     if (tickCount === 3) {
-                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1])); // ESC
+                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1]));
                         tickCount = 0;
                     } else {
                         tickTime = setTimeout(() => {
@@ -213,10 +212,10 @@
                 if (e.key === "Escape") return;
                 e.preventDefault();
                 let val, mode = 0;
-                const nav = { "Backspace": 8, "Tab": 9, "Enter": 13, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40 };
+                const nav = { "Backspace": 8, "Tab": 9, "Enter": 13, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Delete": 46 };
                 if (nav[e.key]) { val = nav[e.key]; mode = 1; }
                 else if (e.key.length === 1) { val = e.key.charCodeAt(0); mode = 0; }
-                if (val) keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
+                if (val !== undefined) keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
             }
         });
 
