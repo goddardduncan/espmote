@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>XIAO Remote</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #121212; color: white; margin: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #pad { width: 80vw; height: 50vh; border: 2px dashed #444; border-radius: 20px; display: flex; align-items: center; justify-content: center; }
+        .active { border-color: #00e676 !important; }
+    </style>
+</head>
+<body>
+    <h1>XIAO BLE Remote</h1>
+    <button id="connect">Connect to XIAO</button>
+    <div id="pad">Tap to Control</div>
+
+    <script>
+        let mouseChar, keyChar;
+        const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+
+        document.getElementById('connect').onclick = async () => {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'XIAO-Chromeo' }],
+                optionalServices: [SERVICE_UUID]
+            });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
+            mouseChar = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
+            keyChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+            alert("Connected!");
+        };
+
+        const pad = document.getElementById('pad');
+        pad.onclick = () => pad.requestPointerLock();
+
+        document.addEventListener('mousemove', e => {
+            if (document.pointerLockElement === pad && mouseChar) {
+                // Packing movement into 3 bytes: 'm', deltaX, deltaY
+                const data = new Int8Array([109, e.movementX, e.movementY]); // 109 = 'm'
+                mouseChar.writeValueWithoutResponse(data);
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (document.pointerLockElement === pad && keyChar) {
+                let code = e.keyCode; 
+                // Simple mapping for demo; you can expand this
+                const data = new Uint8Array([107, code]); // 107 = 'k'
+                keyChar.writeValueWithoutResponse(data);
+            }
+        });
+    </script>
+</body>
+</html>
