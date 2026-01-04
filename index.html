@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>XIAO Chromeo</title>
+    <title>XIAO Remote</title>
     <style>
         :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
         body { background-color: var(--bg-gray); font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
@@ -21,6 +21,7 @@
         
         .btn { background: var(--google-blue); color: white; border: none; padding: 12px 24px; border-radius: 24px; font-weight: 500; cursor: pointer; transition: 0.2s; }
         .btn-ota { background: #34A853; width: 100%; margin-top: 10px; }
+        .btn-ota:disabled { background: #ccc; cursor: not-allowed; }
 
         .shortcut-hint {
             position: absolute; bottom: 20px; font-size: 12px; color: #70757a;
@@ -34,12 +35,14 @@
         .ota-toggle { color: #5F6368; font-size: 12px; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: block; }
         #ota-controls { display: none; background: #fff; padding: 15px; border-radius: 16px; border: 1px solid #dadce0; flex-direction: column; gap: 8px; }
         
+        #fileList { max-height: 150px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #eee; border-radius: 8px; }
         .file-item { 
             text-align: left; font-size: 13px; padding: 12px; cursor: pointer; 
-            background: #f8f9fa; border: 1px solid #eee; border-radius: 8px; margin-bottom: 4px;
+            background: #f8f9fa; border-bottom: 1px solid #eee; transition: 0.2s;
         }
-        .file-item:hover { border-color: var(--google-blue); }
-        .file-item.selected { border: 2px solid var(--google-blue); background: #e8f0fe; font-weight: bold; }
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background: #eef2f7; }
+        .file-item.selected { background: #e8f0fe; font-weight: bold; color: var(--google-blue); border-left: 4px solid var(--google-blue); }
 
         .progress-bar { width: 100%; height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; margin: 10px 0; display: none; }
         .progress-fill { height: 100%; background: var(--google-blue); width: 0%; transition: width 0.1s; }
@@ -64,19 +67,17 @@
     <div id="ota-panel">
         <span class="ota-toggle" onclick="toggleOTA()">Developer: Update Firmware</span>
         <div id="ota-controls">
-            <div id="fileList">
-                </div>
+            <div id="fileList">Loading GitHub firmware...</div>
             <div class="progress-bar" id="pBar"><div class="progress-fill" id="pFill"></div></div>
-            <button id="updateBtn" class="btn btn-ota" disabled>Flash Update</button>
-            <div id="otaStatus" style="font-size:11px; color: #5f6368; margin-top:5px;">Select a version</div>
+            <button id="updateBtn" class="btn btn-ota" disabled>Flash Selected Build</button>
+            <div id="otaStatus" style="font-size:11px; color: #5f6368; margin-top:5px;">Connect and select version</div>
         </div>
     </div>
 
     <script>
-        // --- ADD YOUR BIN FILENAMES HERE ---
-        const firmwareFiles = ["v1.0.bin", "v1.1_beta.bin", "stable_build.bin"];
-        // -----------------------------------
-
+        // --- GITHUB CONFIGURATION ---
+        const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+        
         let mouseChar, keyChar, otaChar, selectedFileArray = null;
         const UUIDS = {
             SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -88,28 +89,46 @@
         const card = document.getElementById('trackpad-card');
         const status = document.getElementById('status');
         const otaStatus = document.getElementById('otaStatus');
+        const fileList = document.getElementById('fileList');
 
-        // Initial setup for file list
-        const list = document.getElementById('fileList');
-        firmwareFiles.forEach(fileName => {
-            const div = document.createElement('div');
-            div.className = "file-item";
-            div.innerText = "📄 " + fileName;
-            div.onclick = async () => {
-                otaStatus.innerText = "Downloading " + fileName + "...";
-                try {
-                    const res = await fetch(fileName);
-                    const blob = await res.blob();
-                    selectedFileArray = new Uint8Array(await blob.arrayBuffer());
-                    otaStatus.innerText = "Ready to flash: " + fileName;
-                    document.getElementById('updateBtn').disabled = false;
-                    Array.from(list.children).forEach(c => c.classList.remove('selected'));
-                    div.classList.add('selected');
-                } catch(e) { otaStatus.innerText = "Error downloading file."; }
-            };
-            list.appendChild(div);
-        });
+        // 1. Fetch File List from GitHub
+        async function loadGitHubFiles() {
+            try {
+                const response = await fetch(REPO_API_URL);
+                const files = await response.json();
+                fileList.innerHTML = "";
 
+                const binFiles = files.filter(f => f.name.endsWith('.bin'));
+
+                if (binFiles.length === 0) {
+                    fileList.innerText = "No .bin files found in /firmware";
+                    return;
+                }
+
+                binFiles.forEach(file => {
+                    const div = document.createElement('div');
+                    div.className = "file-item";
+                    div.innerText = "📦 " + file.name;
+                    div.onclick = async () => {
+                        otaStatus.innerText = "Downloading " + file.name + "...";
+                        try {
+                            const res = await fetch(file.download_url);
+                            const blob = await res.blob();
+                            selectedFileArray = new Uint8Array(await blob.arrayBuffer());
+                            otaStatus.innerText = "Ready: " + file.name;
+                            document.getElementById('updateBtn').disabled = false;
+                            Array.from(fileList.children).forEach(c => c.classList.remove('selected'));
+                            div.classList.add('selected');
+                        } catch(e) { otaStatus.innerText = "Download error."; }
+                    };
+                    fileList.appendChild(div);
+                });
+            } catch (e) {
+                fileList.innerText = "Error loading GitHub folder.";
+            }
+        }
+
+        // 2. Bluetooth Connection
         document.getElementById('connectBtn').onclick = async () => {
             try {
                 const device = await navigator.bluetooth.requestDevice({
@@ -125,13 +144,13 @@
                 status.innerText = "Connected: " + device.name;
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('ota-panel').style.display = 'block';
+                loadGitHubFiles();
 
-                device.addEventListener('gattserverdisconnected', () => {
-                    location.reload(); 
-                });
+                device.addEventListener('gattserverdisconnected', () => { location.reload(); });
             } catch (e) { status.innerText = "Error: " + e.message; }
         };
 
+        // 3. OTA Flash Logic
         document.getElementById('updateBtn').onclick = async () => {
             if (!selectedFileArray || !otaChar) return;
             const pBar = document.getElementById('pBar');
@@ -159,7 +178,7 @@
             otaStatus.innerText = "Success! Device rebooting...";
         };
 
-        // Pointer Lock & Key Logic
+        // 4. Mouse & Triple-Tick Keyboard Logic
         let tickCount = 0, tickTime;
         card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
         document.addEventListener('pointerlockchange', () => {
@@ -181,7 +200,7 @@
                     tickCount++;
                     clearTimeout(tickTime);
                     if (tickCount === 3) {
-                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1]));
+                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1])); // ESC
                         tickCount = 0;
                     } else {
                         tickTime = setTimeout(() => {
