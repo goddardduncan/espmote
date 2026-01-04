@@ -2,30 +2,51 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XIAO Remote</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>XIAO Chromeo Remote</title>
     <style>
-        :root { --blue: #4285F4; --bg: #1a1a1a; }
-        body { background: var(--bg); color: white; font-family: system-ui; margin: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; touch-action: none; overflow: hidden; }
-        #pad { width: 90vw; height: 60vh; border: 2px solid #333; border-radius: 30px; margin-top: 20px; display: flex; align-items: center; justify-content: center; transition: 0.2s; background: #252525; }
-        #pad.active { border-color: var(--blue); box-shadow: 0 0 20px rgba(66, 133, 244, 0.3); }
-        button { padding: 15px 30px; border-radius: 12px; border: none; background: var(--blue); color: white; font-weight: bold; cursor: pointer; margin-top: 20px; }
-        .status { margin-top: 10px; font-size: 0.8em; color: #888; }
+        :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
+        body { background-color: var(--bg-gray); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
+        
+        .header { position: absolute; top: 5%; text-align: center; }
+        #status { font-size: 14px; color: #5F6368; margin-top: 5px; }
+
+        #trackpad-card {
+            background: var(--card-bg); width: 85vw; max-width: 450px; height: 55vh; border-radius: 28px; 
+            border: 1px solid #DADCE0; box-shadow: 0 1px 3px rgba(60,64,67,0.3);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: crosshair; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        #trackpad-card.active { border: 2px solid var(--google-blue); box-shadow: 0 8px 24px rgba(66,133,244,0.2); transform: scale(1.02); }
+        
+        .btn-connect { 
+            background: var(--google-blue); color: white; border: none; padding: 12px 24px; 
+            border-radius: 24px; font-weight: 500; cursor: pointer; margin-bottom: 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .instruction { color: var(--google-blue); font-weight: 500; text-align: center; pointer-events: none; }
+        small { color: #5F6368; font-weight: 400; }
     </style>
 </head>
 <body>
-    <button id="connectBtn">CONNECT XIAO</button>
-    <div id="status" class="status">Not Connected</div>
-    
-    <div id="pad">
-        <div id="instr">1. Connect Bluetooth<br>2. Tap here to Control</div>
+    <div class="header">
+        <h1>XIAO Remote</h1>
+        <div id="status">Bluetooth Disconnected</div>
+    </div>
+
+    <button id="connectBtn" class="btn-connect">Connect to Device</button>
+
+    <div id="trackpad-card">
+        <div class="instruction" id="instr">Tap to Start Control</div>
     </div>
 
     <script>
         let mouseChar, keyChar;
         const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-        const pad = document.getElementById('pad');
+        const card = document.getElementById('trackpad-card');
         const status = document.getElementById('status');
+        const instr = document.getElementById('instr');
 
         document.getElementById('connectBtn').onclick = async () => {
             try {
@@ -38,58 +59,52 @@
                 mouseChar = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
                 keyChar = await service.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
                 status.innerText = "Connected to " + device.name;
+                document.getElementById('connectBtn').style.display = 'none';
             } catch (e) { status.innerText = "Error: " + e.message; }
         };
 
-        pad.onclick = () => pad.requestPointerLock();
+        card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
 
         document.addEventListener('pointerlockchange', () => {
-            const locked = document.pointerLockElement === pad;
-            pad.classList.toggle('active', locked);
-            document.getElementById('instr').innerHTML = locked ? "CONTROL ACTIVE<br>ESC to exit" : "Tap to Control";
+            const locked = document.pointerLockElement === card;
+            card.classList.toggle('active', locked);
+            instr.innerHTML = locked ? "Controlling PC<br><small>ESC to exit</small>" : "Tap to Start Control";
         });
 
-        // MOUSE MOVEMENT
+        // Mouse Move
         document.addEventListener('mousemove', e => {
-            if (document.pointerLockElement === pad && mouseChar) {
-                const data = new Int8Array([109, e.movementX, e.movementY]); // 'm'
-                mouseChar.writeValueWithoutResponse(data);
+            if (document.pointerLockElement === card && mouseChar) {
+                mouseChar.writeValueWithoutResponse(new Int8Array([109, e.movementX, e.movementY]));
             }
         });
 
-        // MOUSE CLICKS
+        // Mouse Clicks (Left=0, Middle=1, Right=2)
         document.addEventListener('mousedown', e => {
-            if (document.pointerLockElement === pad && mouseChar) {
-                const btnMap = [1, 4, 2]; // JS (0,1,2) to HID (1=L, 4=R, 2=M)
-                const data = new Uint8Array([99, btnMap[e.button], 1]); // 'c'
-                mouseChar.writeValueWithoutResponse(data);
+            if (document.pointerLockElement === card && mouseChar) {
+                const btnMap = [1, 2, 4]; // Map to HID Left=1, Middle=2, Right=4
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
-
         document.addEventListener('mouseup', e => {
-            if (document.pointerLockElement === pad && mouseChar) {
-                const btnMap = [1, 4, 2];
-                const data = new Uint8Array([99, btnMap[e.button], 0]); // 'c'
-                mouseChar.writeValueWithoutResponse(data);
+            if (document.pointerLockElement === card && mouseChar) {
+                const btnMap = [1, 2, 4];
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 0]));
             }
         });
 
-        // SCROLLING
+        // Scrolling
         document.addEventListener('wheel', e => {
-            if (document.pointerLockElement === pad && mouseChar) {
-                const delta = e.deltaY > 0 ? -1 : 1;
-                const data = new Int8Array([115, delta]); // 's'
-                mouseChar.writeValueWithoutResponse(data);
+            if (document.pointerLockElement === card && mouseChar) {
+                mouseChar.writeValueWithoutResponse(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
             }
         }, { passive: false });
 
-        // KEYBOARD
+        // Keyboard
         document.addEventListener('keydown', e => {
-            if (document.pointerLockElement === pad && keyChar && e.key !== "Escape") {
+            if (document.pointerLockElement === card && keyChar && e.key !== "Escape") {
                 e.preventDefault();
-                // Send keyCode (simple mapping)
-                const data = new Uint8Array([107, e.keyCode]); // 'k'
-                keyChar.writeValueWithoutResponse(data);
+                // We send the 'keyCode' or 'which' as it's more stable for raw HID mapping
+                keyChar.writeValueWithoutResponse(new Uint8Array([107, e.keyCode]));
             }
         });
     </script>
