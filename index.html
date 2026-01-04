@@ -28,6 +28,7 @@
         }
         .instruction { color: var(--google-blue); font-weight: 500; text-align: center; pointer-events: none; }
         
+        /* Hint Styling with Key Image */
         .shortcut-hint {
             position: absolute; bottom: 25px; font-size: 13px; color: #5F6368;
             background: #F1F3F4; padding: 8px 16px; border-radius: 20px;
@@ -35,6 +36,12 @@
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         #trackpad-card.active .shortcut-hint { opacity: 1; }
+
+        .key-img { height: 24px; vertical-align: middle; border-radius: 3px; }
+        .esc-box { 
+            background: #fff; border: 1px solid #DADCE0; border-bottom: 2px solid #BDC1C6;
+            padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;
+        }
 
         small { color: #5F6368; font-weight: 400; }
     </style>
@@ -49,6 +56,7 @@
 
     <div id="trackpad-card">
         <div class="instruction" id="instr">Tap to Start Control</div>
+        
         <div class="shortcut-hint">
             Tap <img src="https://www.clipartden.com/_thumbspd/computer/computer/computer_key_num_row_00.png" class="key-img"> 
             3x for <span class="esc-box">ESC</span>
@@ -85,7 +93,7 @@
         document.addEventListener('pointerlockchange', () => {
             const locked = document.pointerLockElement === card;
             card.classList.toggle('active', locked);
-            instr.innerHTML = locked ? "Controlling device<br><small>Physical ESC to exit</small>" : "Tap to Start Control";
+            instr.innerHTML = locked ? "Controlling PC<br><small>Physical ESC to exit mode</small>" : "Tap to Start Control";
         });
 
         document.addEventListener('mousemove', e => {
