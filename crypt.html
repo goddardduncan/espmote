@@ -88,14 +88,33 @@
         aesIV = CryptoJS.enc.Utf8.parse('abcdefghijklmnop');
 
         async function sendEncrypted(characteristic, dataArray) {
-            if (!characteristic || !aesKeyParsed) return;
-            const wordArray = CryptoJS.lib.WordArray.create(dataArray);
-            const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
-                iv: aesIV, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
-            });
-            const cipherBytes = Uint8Array.from(atob(encrypted.toString()), c => c.charCodeAt(0));
-            try { await characteristic.writeValueWithoutResponse(cipherBytes); } catch (e) {}
-        }
+    if (!characteristic || !aesKeyParsed) return;
+
+    // 1. Generate a NEW random IV for every single packet
+    const randomIV = CryptoJS.lib.WordArray.random(16);
+
+    const wordArray = CryptoJS.lib.WordArray.create(dataArray);
+    
+    // 2. Encrypt using the new random IV
+    const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
+        iv: randomIV, 
+        mode: CryptoJS.mode.CBC, 
+        padding: CryptoJS.pad.Pkcs7
+    });
+
+    // 3. Convert both to bytes
+    const ivBytes = Uint8Array.from(atob(randomIV.toString(CryptoJS.enc.Base64)), c => c.charCodeAt(0));
+    const cipherBytes = Uint8Array.from(atob(encrypted.toString()), c => c.charCodeAt(0));
+
+    // 4. Combine them: [16 bytes of IV] + [Encrypted Data]
+    const combined = new Uint8Array(ivBytes.length + cipherBytes.length);
+    combined.set(ivBytes);
+    combined.set(cipherBytes, ivBytes.length);
+
+    try { 
+        await characteristic.writeValueWithoutResponse(combined); 
+    } catch (e) { console.error("Send failed", e); }
+}
 
         async function loadGitHubFiles() {
             try {
