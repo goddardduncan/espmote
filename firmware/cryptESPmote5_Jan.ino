@@ -41,17 +41,25 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 // AES Decryption Helper
 void decryptAndHandle(uint8_t* data, size_t len, String uuid) {
-    // AES blocks must be 16-byte aligned
-    if (len == 0 || len % 16 != 0) return;
+    // We now expect 16 bytes of IV + at least 16 bytes of encrypted data
+    if (len < 32 || (len - 16) % 16 != 0) return;
 
-    uint8_t decrypted[len];
-    unsigned char iv_copy[16];
-    memcpy(iv_copy, aes_iv, 16); // IV is modified by the process, so we use a copy
+    // 1. Extract the IV from the first 16 bytes of the incoming data
+    unsigned char dynamic_iv[16];
+    memcpy(dynamic_iv, data, 16);
 
+    // 2. The actual ciphertext starts AFTER the 16-byte IV
+    uint8_t* ciphertext = data + 16;
+    size_t cipherLen = len - 16;
+    uint8_t decrypted[cipherLen];
+
+    // 3. Decrypt using the IV we just extracted
     mbedtls_aes_context aes;
     mbedtls_aes_init(&aes);
     mbedtls_aes_setkey_dec(&aes, aes_key, 128);
-    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, len, iv_copy, data, decrypted);
+    
+    // Use dynamic_iv here instead of the hardcoded aes_iv
+    mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, cipherLen, dynamic_iv, ciphertext, decrypted);
     mbedtls_aes_free(&aes);
 
     char type = (char)decrypted[0];
@@ -68,9 +76,9 @@ void decryptAndHandle(uint8_t* data, size_t len, String uuid) {
     else if (uuid == KEYBOARD_CHARACTERISTIC) {
         if (type == 'k') {
             uint8_t val = decrypted[1];
-            uint8_t mode = decrypted[2]; // 0=ASCII, 1=Special, 3=Modifier Combo
+            uint8_t mode = decrypted[2]; 
 
-            if (mode == 3) { // Modifier Combo (e.g. Ctrl+C)
+            if (mode == 3) { 
                 uint8_t modifier = decrypted[1]; 
                 uint8_t key = decrypted[3];      
                 Keyboard.press(modifier);
@@ -78,7 +86,7 @@ void decryptAndHandle(uint8_t* data, size_t len, String uuid) {
                 delay(15);
                 Keyboard.releaseAll();
             }
-            else if (mode == 1) { // Special Keys (Switch case from old code)
+            else if (mode == 1) { 
                 switch (val) {
                     case 8:  Keyboard.write(KEY_BACKSPACE); break;
                     case 9:  Keyboard.write(KEY_TAB); break;
