@@ -1,62 +1,115 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Secure XIAO Mote</title>
-    <script src="https://unpkg.com/@noble/curves@1.2.0/dist/index.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>XIAO Secure Remote</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
-        body { background: #111; color: #eee; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        #trackpad { width: 300px; height: 300px; background: #222; border: 2px solid #444; margin: 20px auto; border-radius: 10px; }
-        .active { border-color: #007bff !important; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        :root { --google-blue: #4285F4; --bg-gray: #F8F9FA; --text-dark: #3C4043; --card-bg: #FFFFFF; }
+        body { background-color: var(--bg-gray); font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: var(--text-dark); overflow: hidden; touch-action: none; }
+        .header { position: absolute; top: 3%; text-align: center; }
+        #trackpad-card {
+            background: var(--card-bg); width: 85vw; max-width: 450px; height: 40vh; border-radius: 28px; 
+            border: 1px solid #DADCE0; box-shadow: 0 1px 3px rgba(60,64,67,0.3);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: crosshair; transition: all 0.3s ease; position: relative;
+        }
+        #trackpad-card.active { border: 2px solid var(--google-blue); box-shadow: 0 8px 24px rgba(66,133,244,0.15); transform: scale(1.01); }
+        .btn { background: var(--google-blue); color: white; border: none; padding: 12px 24px; border-radius: 24px; font-weight: 500; cursor: pointer; margin: 5px; }
+        input { padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 10px; width: 200px; text-align: center; }
     </style>
 </head>
 <body>
-    <h2 id="status">Disconnected</h2>
-    <button id="connectBtn">Connect & Secure</button>
-    <div id="trackpad">Trackpad Area</div>
+
+    <div class="header">
+        <h2 style="margin:0">XIAO Secure Remote</h2>
+        <div id="status">Enter Key & Connect</div>
+    </div>
+
+    <input type="password" id="aesKey" placeholder="16-char AES Key" maxlength="16" value="1234567890123456">
+    <button id="connectBtn" class="btn">Connect Bluetooth</button>
+
+    <div id="trackpad-card">
+        <div id="instr">Unlock with Key & Connect</div>
+    </div>
 
     <script>
-        const DEVICE_PUB_HEX = "719e7e8354c0428d055a4087e502579df6e10f19f2a033f2187c9451458d927a";
-        let hidChar, sharedKey;
-
-        document.getElementById('connectBtn').onclick = async () => {
-            try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: 'XIAO-Vault' }],
-                    optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]
-                });
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
-                hidChar = await service.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
-
-                // --- Handshake ---
-                const x25519 = nobleCurves.ed25519; // noble library access
-                const appPriv = x25519.utils.randomPrivateKey();
-                const appPub = x25519.getPublicKey(appPriv);
-                
-                await hidChar.writeValue(appPub); // Send 32 bytes
-                sharedKey = x25519.getSharedSecret(appPriv, DEVICE_PUB_HEX);
-                
-                document.getElementById('status').innerText = "SECURE TUNNEL ACTIVE";
-            } catch (e) { alert(e); }
+        let mouseChar, keyChar, aesKeyParsed, aesIV;
+        const UUIDS = {
+            SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+            MOUSE:   "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
+            KEY:     "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
         };
 
-        async function sendMove(x, y) {
-            if (!sharedKey) return;
-            const iv = crypto.getRandomValues(new Uint8Array(16));
-            const payload = new Uint8Array([109, x, y]);
-            const packet = new Uint8Array(16 + payload.length);
-            packet.set(iv);
-            for(let i=0; i<payload.length; i++) {
-                packet[i+16] = payload[i] ^ sharedKey[i%32] ^ iv[i%16];
-            }
-            await hidChar.writeValueWithoutResponse(packet);
+        // Standard IV - should match ESP32
+        aesIV = CryptoJS.enc.Utf8.parse('abcdefghijklmnop'); 
+
+        async function sendEncrypted(characteristic, dataArray) {
+            if (!characteristic || !aesKeyParsed) return;
+            
+            const wordArray = CryptoJS.lib.WordArray.create(dataArray);
+            const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
+                iv: aesIV,
+                mode: CryptoJS.mode.CBC,
+                padding: CryptoJS.pad.Pkcs7
+            });
+
+            // Convert Base64 string to Uint8Array
+            const binaryString = atob(encrypted.toString());
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+            
+            try {
+                await characteristic.writeValue(bytes);
+            } catch (e) { console.error("Send failed", e); }
         }
 
-        const trackpad = document.getElementById('trackpad');
-        trackpad.onmousemove = (e) => {
-            if (e.buttons === 1) sendMove(e.movementX, e.movementY);
+        document.getElementById('connectBtn').onclick = async () => {
+            const keyInput = document.getElementById('aesKey').value;
+            if (keyInput.length !== 16) {
+                alert("Key must be exactly 16 characters!");
+                return;
+            }
+            aesKeyParsed = CryptoJS.enc.Utf8.parse(keyInput);
+
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'XIAO-' }],
+                    optionalServices: [UUIDS.SERVICE]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(UUIDS.SERVICE);
+                mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
+                keyChar   = await service.getCharacteristic(UUIDS.KEY);
+                
+                document.getElementById('status').innerText = "Connected Securely";
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('aesKey').style.display = 'none';
+            } catch (e) { alert(e.message); }
         };
+
+        const card = document.getElementById('trackpad-card');
+        card.onclick = () => { if(mouseChar) card.requestPointerLock(); };
+
+        document.addEventListener('mousemove', e => {
+            if (document.pointerLockElement === card) {
+                sendEncrypted(mouseChar, new Int8Array([109, e.movementX, e.movementY]));
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (document.pointerLockElement === card) {
+                e.preventDefault();
+                let val = e.key.length === 1 ? e.key.charCodeAt(0) : 0;
+                let mode = e.key.length === 1 ? 0 : 1; 
+                // Simple mapping for this example
+                if (e.key === "Backspace") { val = 8; mode = 1; }
+                if (e.key === "Enter") { val = 13; mode = 1; }
+                
+                sendEncrypted(keyChar, new Uint8Array([107, val, mode]));
+            }
+        });
     </script>
 </body>
 </html>
