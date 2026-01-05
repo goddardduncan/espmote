@@ -114,7 +114,7 @@
         document.getElementById('connectBtn').onclick = async () => {
             try {
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: 'XIAO-Chromeo' }],
+                    filters: [{ namePrefix: 'XIAO-' }],
                     optionalServices: [UUIDS.SERVICE]
                 });
                 const server = await device.gatt.connect();
