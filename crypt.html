@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>XIAO Secure Vault</title>
+    <style>
+        body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        #trackpad { width: 90vw; height: 50vh; border: 2px solid #333; border-radius: 20px; background: #222; display: flex; align-items: center; justify-content: center; cursor: crosshair; }
+        #trackpad.active { border-color: #007bff; box-shadow: 0 0 20px rgba(0,123,255,0.2); }
+        .btn { background: #007bff; color: white; border: none; padding: 15px 30px; border-radius: 30px; font-size: 18px; cursor: pointer; margin-bottom: 20px; }
+        #status { font-size: 14px; color: #888; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="status">Secure Tunnel: Offline</div>
+    <button id="connectBtn" class="btn">Initialize Secure Link</button>
+    <div id="trackpad">Tap to Activate Trackpad</div>
+
+    <script type="module">
+        import * as x25519 from 'https://unpkg.com/@noble/curves/esm/ed25519.js';
+
+        const UUIDS = {
+            SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+            HID: "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+        };
+        // Matches the ESP32 Public Key
+        const DEVICE_PUB_HEX = "719e7e8354c0428d055a4087e502579df6e10f19f2a033f2187c9451458d927a";
+        
+        let hidChar, sharedKey = null;
+        const trackpad = document.getElementById('trackpad');
+
+        document.getElementById('connectBtn').onclick = async () => {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'XIAO-Vault' }],
+                    optionalServices: [UUIDS.SERVICE]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(UUIDS.SERVICE);
+                hidChar = await service.getCharacteristic(UUIDS.HID);
+
+                // --- CRYPTO HANDSHAKE ---
+                const appPriv = x25519.utils.randomPrivateKey();
+                const appPub = x25519.getPublicKey(appPriv);
+                
+                // Send Public Key to ESP32
+                await hidChar.writeValue(appPub);
+                
+                // Compute Shared Secret
+                sharedKey = x25519.getSharedSecret(appPriv, DEVICE_PUB_HEX);
+                
+                document.getElementById('status').innerText = "Secure Tunnel: ACTIVE";
+                document.getElementById('connectBtn').style.display = 'none';
+            } catch (e) { alert(e); }
+        };
+
+        async function sendEncrypted(dataArray) {
+            if (!sharedKey || !hidChar) return;
+            const iv = crypto.getRandomValues(new Uint8Array(16));
+            const encrypted = new Uint8Array(dataArray.length);
+            
+            for(let i=0; i < dataArray.length; i++) {
+                encrypted[i] = dataArray[i] ^ sharedKey[i % 32] ^ iv[i % 16];
+            }
+
+            const packet = new Uint8Array([...iv, ...encrypted]);
+            await hidChar.writeValueWithoutResponse(packet);
+        }
+
+        // --- Interaction Logic ---
+        trackpad.onclick = () => trackpad.requestPointerLock();
+        
+        document.addEventListener('mousemove', e => {
+            if (document.pointerLockElement === trackpad) {
+                sendEncrypted([109, e.movementX, e.movementY]);
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (document.pointerLockElement === trackpad) {
+                e.preventDefault();
+                sendEncrypted([107, e.key.charCodeAt(0), 0]);
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            trackpad.classList.toggle('active', document.pointerLockElement === trackpad);
+        });
+    </script>
+</body>
+</html>
