@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>XIAO Secure Remote</title>
+    <title>XIAO Remote</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
       :root {
@@ -294,7 +294,7 @@
           keyChar = await service.getCharacteristic(UUIDS.KEY);
           otaChar = await service.getCharacteristic(UUIDS.OTA);
 
-          document.getElementById("status").innerText = "Connected Securely";
+          document.getElementById("status").innerText = "Connected";
           document.getElementById("connectBtn").style.display = "none";
           document.getElementById("ota-panel").style.display = "block";
           loadGitHubFiles();
