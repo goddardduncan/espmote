@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>XIAO Secure Remote</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
@@ -83,18 +80,9 @@
         cursor: not-allowed;
       }
 
-      input {
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid #dadce0;
-        margin-bottom: 10px;
-        width: 220px;
-        text-align: center;
-        font-family: monospace;
-        outline: none;
-      }
-      input:focus {
-        border-color: var(--google-blue);
+      /* Hiding the key entry bubble as requested */
+      #aesKey {
+        display: none;
       }
 
       .shortcut-hint {
@@ -196,12 +184,8 @@
       <div id="status">Ready to connect</div>
     </div>
 
-    <input
-      type="password"
-      id="aesKey"
-      placeholder="16-char AES Key"
-      value="1234567890123456"
-    />
+    <input type="password" id="aesKey" value="1234567890123456" />
+    
     <button id="connectBtn" class="btn">Connect Bluetooth</button>
 
     <div id="trackpad-card">
@@ -213,9 +197,7 @@
     </div>
 
     <div id="ota-panel">
-      <span class="ota-toggle" onclick="toggleOTA()"
-        >Developer: Update Firmware</span
-      >
+      <span class="ota-toggle" onclick="toggleOTA()">Developer: Update Firmware</span>
       <div id="ota-controls">
         <div id="fileList">Loading GitHub firmware...</div>
         <div class="progress-bar" id="pBar">
@@ -224,24 +206,15 @@
         <button id="updateBtn" class="btn btn-ota" disabled>
           Flash Selected Build
         </button>
-        <div
-          id="otaStatus"
-          style="font-size: 11px; color: #5f6368; margin-top: 5px"
-        >
+        <div id="otaStatus" style="font-size: 11px; color: #5f6368; margin-top: 5px">
           Select version
         </div>
       </div>
     </div>
 
     <script>
-      const REPO_API_URL =
-        "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
-      let mouseChar,
-        keyChar,
-        otaChar,
-        aesKeyParsed,
-        aesIV,
-        selectedFileArray = null;
+      const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+      let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
 
       const UUIDS = {
         SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -250,42 +223,32 @@
         OTA: "6e400004-b5a3-f393-e0a9-e50e24dcca9e",
       };
 
-      aesIV = CryptoJS.enc.Utf8.parse("abcdefghijklmnop");
-
       async function sendEncrypted(characteristic, dataArray) {
         if (!characteristic || !aesKeyParsed) return;
 
-        // 1. Generate a NEW random IV for every single packet
+        // 1. Random IV per packet
         const randomIV = CryptoJS.lib.WordArray.random(16);
-
         const wordArray = CryptoJS.lib.WordArray.create(dataArray);
 
-        // 2. Encrypt using the new random IV
+        // 2. Encrypt
         const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
           iv: randomIV,
           mode: CryptoJS.mode.CBC,
           padding: CryptoJS.pad.Pkcs7,
         });
 
-        // 3. Convert both to bytes
-        const ivBytes = Uint8Array.from(
-          atob(randomIV.toString(CryptoJS.enc.Base64)),
-          (c) => c.charCodeAt(0)
-        );
-        const cipherBytes = Uint8Array.from(atob(encrypted.toString()), (c) =>
-          c.charCodeAt(0)
-        );
+        // 3. Convert to Bytes
+        const ivBytes = Uint8Array.from(atob(randomIV.toString(CryptoJS.enc.Base64)), (c) => c.charCodeAt(0));
+        const cipherBytes = Uint8Array.from(atob(encrypted.toString()), (c) => c.charCodeAt(0));
 
-        // 4. Combine them: [16 bytes of IV] + [Encrypted Data]
+        // 4. Pack: [IV (16 bytes)][Ciphertext]
         const combined = new Uint8Array(ivBytes.length + cipherBytes.length);
         combined.set(ivBytes);
         combined.set(cipherBytes, ivBytes.length);
 
         try {
           await characteristic.writeValueWithoutResponse(combined);
-        } catch (e) {
-          console.error("Send failed", e);
-        }
+        } catch (e) {}
       }
 
       async function loadGitHubFiles() {
@@ -294,31 +257,24 @@
           const files = await response.json();
           const list = document.getElementById("fileList");
           list.innerHTML = "";
-          files
-            .filter((f) => f.name.endsWith(".bin"))
-            .forEach((file) => {
-              const div = document.createElement("div");
-              div.className = "file-item";
-              div.innerHTML = `<span>📦 ${file.name}</span>`;
-              div.onclick = async () => {
-                document.getElementById("otaStatus").innerText =
-                  "Downloading...";
-                const res = await fetch(file.download_url);
-                const blob = await res.blob();
-                selectedFileArray = new Uint8Array(await blob.arrayBuffer());
-                document.getElementById("otaStatus").innerText =
-                  "Ready: " + file.name;
-                document.getElementById("updateBtn").disabled = false;
-                Array.from(list.children).forEach((c) =>
-                  c.classList.remove("selected")
-                );
-                div.classList.add("selected");
-              };
-              list.appendChild(div);
-            });
+          files.filter((f) => f.name.endsWith(".bin")).forEach((file) => {
+            const div = document.createElement("div");
+            div.className = "file-item";
+            div.innerHTML = `<span>📦 ${file.name}</span>`;
+            div.onclick = async () => {
+              document.getElementById("otaStatus").innerText = "Downloading...";
+              const res = await fetch(file.download_url);
+              const blob = await res.blob();
+              selectedFileArray = new Uint8Array(await blob.arrayBuffer());
+              document.getElementById("otaStatus").innerText = "Ready: " + file.name;
+              document.getElementById("updateBtn").disabled = false;
+              Array.from(list.children).forEach((c) => c.classList.remove("selected"));
+              div.classList.add("selected");
+            };
+            list.appendChild(div);
+          });
         } catch (e) {
-          document.getElementById("fileList").innerText =
-            "Error loading GitHub.";
+          document.getElementById("fileList").innerText = "Error loading GitHub.";
         }
       }
 
@@ -340,12 +296,9 @@
 
           document.getElementById("status").innerText = "Connected Securely";
           document.getElementById("connectBtn").style.display = "none";
-          document.getElementById("aesKey").style.display = "none";
           document.getElementById("ota-panel").style.display = "block";
           loadGitHubFiles();
-          device.addEventListener("gattserverdisconnected", () => {
-            location.reload();
-          });
+          device.addEventListener("gattserverdisconnected", () => { location.reload(); });
         } catch (e) {
           document.getElementById("status").innerText = e.message;
         }
@@ -353,53 +306,32 @@
 
       // --- TRACKPAD LOGIC ---
       const card = document.getElementById("trackpad-card");
-      card.onclick = () => {
-        if (mouseChar) card.requestPointerLock();
-      };
+      card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
       document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
-        document.getElementById("instr").innerText = locked
-          ? "Mode: Active"
-          : "Tap to control device";
+        document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
       });
 
       document.addEventListener("mousemove", (e) => {
         if (document.pointerLockElement === card)
-          sendEncrypted(
-            mouseChar,
-            new Int8Array([109, e.movementX, e.movementY])
-          );
+          sendEncrypted(mouseChar, new Int8Array([109, e.movementX, e.movementY]));
       });
       document.addEventListener("mousedown", (e) => {
         if (document.pointerLockElement === card)
-          sendEncrypted(
-            mouseChar,
-            new Uint8Array([99, [1, 4, 2][e.button], 1])
-          );
+          sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
       });
       document.addEventListener("mouseup", (e) => {
         if (document.pointerLockElement === card)
-          sendEncrypted(
-            mouseChar,
-            new Uint8Array([99, [1, 4, 2][e.button], 0])
-          );
+          sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 0]));
       });
-      document.addEventListener(
-        "wheel",
-        (e) => {
-          if (document.pointerLockElement === card)
-            sendEncrypted(
-              mouseChar,
-              new Int8Array([115, e.deltaY > 0 ? -1 : 1])
-            );
-        },
-        { passive: false }
-      );
+      document.addEventListener("wheel", (e) => {
+        if (document.pointerLockElement === card)
+          sendEncrypted(mouseChar, new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+      }, { passive: false });
 
       // --- KEYBOARD LOGIC ---
-      let tickCount = 0,
-        tickTime;
+      let tickCount = 0, tickTime;
       document.addEventListener("keydown", (e) => {
         if (document.pointerLockElement === card && keyChar) {
           if (e.key === "Escape") return;
@@ -413,8 +345,7 @@
               tickCount = 0;
             } else {
               tickTime = setTimeout(() => {
-                if (tickCount === 1)
-                  sendEncrypted(keyChar, new Uint8Array([107, 96, 0]));
+                if (tickCount === 1) sendEncrypted(keyChar, new Uint8Array([107, 96, 0]));
                 tickCount = 0;
               }, 500);
             }
@@ -422,25 +353,12 @@
           }
 
           if (e.ctrlKey && e.key.length === 1) {
-            sendEncrypted(
-              keyChar,
-              new Uint8Array([107, 128, 3, e.key.toLowerCase().charCodeAt(0)])
-            );
+            sendEncrypted(keyChar, new Uint8Array([107, 128, 3, e.key.toLowerCase().charCodeAt(0)]));
             return;
           }
 
-          let val,
-            mode = 0;
-          const nav = {
-            Backspace: 8,
-            Tab: 9,
-            Enter: 13,
-            ArrowLeft: 37,
-            ArrowUp: 38,
-            ArrowRight: 39,
-            ArrowDown: 40,
-            Delete: 46,
-          };
+          let val, mode = 0;
+          const nav = { Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46 };
           if (nav[e.key]) {
             val = nav[e.key];
             mode = 1;
@@ -448,8 +366,7 @@
             val = e.key.charCodeAt(0);
             mode = 0;
           }
-          if (val !== undefined)
-            sendEncrypted(keyChar, new Uint8Array([107, val, mode]));
+          if (val !== undefined) sendEncrypted(keyChar, new Uint8Array([107, val, mode]));
         }
       });
 
@@ -466,11 +383,7 @@
 
         const beginMsg = new Uint8Array(5);
         beginMsg[0] = 66; // 'B'
-        new DataView(beginMsg.buffer).setUint32(
-          1,
-          selectedFileArray.length,
-          true
-        );
+        new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
         await otaChar.writeValue(beginMsg);
 
         const chunkSize = 128;
@@ -485,8 +398,7 @@
           document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
         }
         await otaChar.writeValue(new Uint8Array([69])); // 'E'
-        document.getElementById("otaStatus").innerText =
-          "Success! Rebooting...";
+        document.getElementById("otaStatus").innerText = "Success! Rebooting...";
       };
     </script>
   </body>
