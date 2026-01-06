@@ -421,14 +421,42 @@ document.addEventListener("pointerlockchange", () => {
   }
 });
 
+let accumulatedX = 0;
+let accumulatedY = 0;
+let isThrottled = false;
+
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === card) {
     const sensitivity = 1.5;
-    const scaledX = Math.round(e.movementX * sensitivity);
-    const scaledY = Math.round(e.movementY * sensitivity);
-    sendEncrypted(mouseChar, new Int8Array([109, scaledX, scaledY]));
+    // Accumulate the movement rather than sending it immediately
+    accumulatedX += e.movementX * sensitivity;
+    accumulatedY += e.movementY * sensitivity;
+
+    if (!isThrottled) {
+      isThrottled = true;
+      // Use requestAnimationFrame to sync with the screen's refresh rate (60Hz+)
+      requestAnimationFrame(sendMouseData);
+    }
   }
 });
+
+async function sendMouseData() {
+  // Only send if there is actual movement to report
+  if (Math.abs(accumulatedX) >= 1 || Math.abs(accumulatedY) >= 1) {
+    // Round to integers for the HID driver
+    const moveX = Math.round(accumulatedX);
+    const moveY = Math.round(accumulatedY);
+
+    // Send the encrypted packet
+    await sendEncrypted(mouseChar, new Int8Array([109, moveX, moveY]));
+
+    // Subtract what we sent, but KEEP the fractional remainder for the next frame
+    accumulatedX -= moveX;
+    accumulatedY -= moveY;
+  }
+  
+  isThrottled = false;
+}
 
 document.addEventListener("mousedown", (e) => {
   if (document.pointerLockElement === card)
@@ -441,8 +469,11 @@ document.addEventListener("mouseup", (e) => {
 });
 
 document.addEventListener("wheel", (e) => {
-  if (document.pointerLockElement === card)
-    sendEncrypted(mouseChar, new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+  if (document.pointerLockElement === card) {
+    // Normalize scroll behavior across browsers
+    const scrollDelta = e.deltaY > 0 ? -1 : 1;
+    sendEncrypted(mouseChar, new Int8Array([115, scrollDelta]));
+  }
 }, { passive: false });
 
 // --- KEYBOARD ---
