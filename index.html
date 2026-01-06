@@ -140,7 +140,7 @@
             const beginMsg = new Uint8Array(5);
             beginMsg[0] = 66; 
             new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
-            await otaChar.writeValue(beginMsg);
+            await otaChar.writeValueWithoutResponse(beginMsg);
 
             const chunkSize = 128; 
             for (let i = 0; i < selectedFileArray.length; i += chunkSize) {
@@ -148,12 +148,12 @@
                 const dataMsg = new Uint8Array(chunk.length + 1);
                 dataMsg[0] = 68; 
                 dataMsg.set(chunk, 1);
-                await otaChar.writeValue(dataMsg);
+                await otaChar.writeValueWithoutResponse(dataMsg);
                 let pct = Math.round((i / selectedFileArray.length) * 100);
                 pFill.style.width = pct + "%";
                 otaStatus.innerText = `Updating: ${pct}%`;
             }
-            await otaChar.writeValue(new Uint8Array([69])); 
+            await otaChar.writeValueWithoutResponse(new Uint8Array([69])); 
             otaStatus.innerText = "Success! Device rebooting...";
         };
 
@@ -168,26 +168,26 @@
 
         document.addEventListener('mousemove', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                mouseChar.writeValue(new Int8Array([109, e.movementX, e.movementY]));
+                mouseChar.writeValueWithoutResponse(new Int8Array([109, e.movementX, e.movementY]));
             }
         });
 
         document.addEventListener('mousedown', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 const btnMap = [1, 4, 2];
-                mouseChar.writeValue(new Uint8Array([99, btnMap[e.button], 1]));
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 1]));
             }
         });
         document.addEventListener('mouseup', e => {
             if (document.pointerLockElement === card && mouseChar) {
                 const btnMap = [1, 4, 2];
-                mouseChar.writeValue(new Uint8Array([99, btnMap[e.button], 0]));
+                mouseChar.writeValueWithoutResponse(new Uint8Array([99, btnMap[e.button], 0]));
             }
         });
 
         document.addEventListener('wheel', e => {
             if (document.pointerLockElement === card && mouseChar) {
-                mouseChar.writeValue(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+                mouseChar.writeValueWithoutResponse(new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
             }
         }, { passive: false });
 
@@ -199,11 +199,11 @@
                     tickCount++;
                     clearTimeout(tickTime);
                     if (tickCount === 3) {
-                        keyChar.writeValue(new Uint8Array([107, 27, 1]));
+                        keyChar.writeValueWithoutResponse(new Uint8Array([107, 27, 1]));
                         tickCount = 0;
                     } else {
                         tickTime = setTimeout(() => {
-                            if (tickCount === 1) keyChar.writeValue(new Uint8Array([107, 96, 0]));
+                            if (tickCount === 1) keyChar.writeValueWithoutResponse(new Uint8Array([107, 96, 0]));
                             tickCount = 0;
                         }, 500);
                     }
@@ -218,7 +218,7 @@
                     const ctrlCode = 128; // HID Left Ctrl
                     const keyCode = e.key.toLowerCase().charCodeAt(0);
                     // Sends: type 'k', modifier code, mode 3, specific key code
-                    keyChar.writeValue(new Uint8Array([107, ctrlCode, 3, keyCode]));
+                    keyChar.writeValueWithoutResponse(new Uint8Array([107, ctrlCode, 3, keyCode]));
                     return;
                 }
 
@@ -227,7 +227,7 @@
                 if (nav[e.key]) { val = nav[e.key]; mode = 1; }
                 else if (e.key.length === 1) { val = e.key.charCodeAt(0); mode = 0; }
                 
-                if (val !== undefined) keyChar.writeValue(new Uint8Array([107, val, mode]));
+                if (val !== undefined) keyChar.writeValueWithoutResponse(new Uint8Array([107, val, mode]));
             }
         });
 
