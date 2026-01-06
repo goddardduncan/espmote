@@ -259,7 +259,13 @@
         <span class="key-cap">ESC</span>
       </div>
     </div>
-
+<br>
+    <div class="sensitivity-container">
+      <label for="sensSlider">Sensitivity</label>
+      <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0">
+      <span id="sensValue">2.0</span>
+    </div>
+    
     <div id="ota-panel">
       <span class="ota-toggle" onclick="toggleOTA()">Developer: Update Firmware</span>
       <div id="ota-controls">
@@ -270,12 +276,6 @@
         <button id="updateBtn" class="btn btn-ota" disabled>Flash Selected Build</button>
         <div id="otaStatus" style="font-size: 11px; color: #5f6368; margin-top: 5px">Select version</div>
       </div>
-    </div>
-    
-    <div class="sensitivity-container">
-      <label for="sensSlider">Sensitivity</label>
-      <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0">
-      <span id="sensValue">2.0</span>
     </div>
     
     <div class="footer">
