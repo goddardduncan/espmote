@@ -37,11 +37,38 @@
         margin-top: 4px;
       }
 
+      /* Sensitivity Slider Styling */
+      .sensitivity-container {
+        width: 85vw;
+        max-width: 450px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 15px;
+        padding: 8px 16px;
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #dadce0;
+        font-size: 14px;
+        color: #5f6368;
+      }
+      #sensSlider {
+        flex-grow: 1;
+        accent-color: var(--google-blue);
+        cursor: pointer;
+      }
+      #sensValue {
+        min-width: 25px;
+        font-family: monospace;
+        font-weight: bold;
+        color: var(--google-blue);
+      }
+
       #trackpad-card {
         background: var(--card-bg);
         width: 85vw;
         max-width: 450px;
-        height: 42vh;
+        height: 40vh;
         border-radius: 28px;
         border: 1px solid #dadce0;
         box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
@@ -85,7 +112,6 @@
         display: none; 
       }
 
-      /* Key Input Container */
       .key-container {
         display: flex;
         align-items: center;
@@ -226,6 +252,12 @@
         <button id="confirmBtn" class="btn">Confirm & Save Key</button>
     </div>
 
+    <div class="sensitivity-container">
+      <label for="sensSlider">Sensitivity</label>
+      <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0">
+      <span id="sensValue">2.0</span>
+    </div>
+
     <div id="trackpad-card">
       <div id="instr">Tap to control device</div>
       <div class="shortcut-hint">
@@ -257,6 +289,7 @@ const storeName = "KeyStore";
 
 let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
 let hasAttemptedConnection = false;
+let mouseSensitivity = 2.0; // Dynamic sensitivity state
 
 const UUIDS = {
   SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -266,6 +299,14 @@ const UUIDS = {
 };
 
 // --- UI & KEY MANAGEMENT ---
+
+const slider = document.getElementById("sensSlider");
+const sensDisplay = document.getElementById("sensValue");
+
+slider.oninput = (e) => {
+  mouseSensitivity = parseFloat(e.target.value);
+  sensDisplay.innerText = mouseSensitivity.toFixed(1);
+};
 
 function togglePassword() {
   const input = document.getElementById("aesKey");
@@ -284,7 +325,6 @@ function updateActiveKey() {
 
 function showSetupButtons() {
   const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
-  // Only show buttons if connected and key isn't permanently locked in yet
   if (hasAttemptedConnection && !isKeySaved) {
     document.getElementById("changeKeyBtn").style.display = "inline-block";
     document.getElementById("confirmBtn").style.display = "inline-block";
@@ -373,7 +413,7 @@ document.getElementById("connectBtn").onclick = async () => {
     document.getElementById("ota-panel").style.display = "block";
     
     hasAttemptedConnection = true;
-    showSetupButtons(); // Make Change and Confirm visible immediately
+    showSetupButtons();
 
     loadGitHubFiles();
     device.addEventListener("gattserverdisconnected", () => { location.reload(); });
@@ -413,9 +453,8 @@ document.addEventListener("pointerlockchange", () => {
   document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
 
   if (!locked) {
-    showSetupButtons(); // Re-show buttons when exiting pointer lock
+    showSetupButtons();
   } else {
-    // Hide buttons during active use to maximize space/cleanliness
     document.getElementById("changeKeyBtn").style.display = "none";
     document.getElementById("confirmBtn").style.display = "none";
   }
@@ -423,9 +462,8 @@ document.addEventListener("pointerlockchange", () => {
 
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === card) {
-    const sensitivity = 2;
-    const scaledX = Math.round(e.movementX * sensitivity);
-    const scaledY = Math.round(e.movementY * sensitivity);
+    const scaledX = Math.round(e.movementX * mouseSensitivity);
+    const scaledY = Math.round(e.movementY * mouseSensitivity);
     sendEncrypted(mouseChar, new Int8Array([109, scaledX, scaledY]));
   }
 });
