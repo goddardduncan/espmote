@@ -263,6 +263,7 @@
       
       let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
       let hasAttemptedConnection = false;
+      let hasActivatedOnce = false; // Tracks if the user has clicked the trackpad
 
       const UUIDS = {
         SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -288,7 +289,10 @@
         if (k.length !== 16) return alert("Key must be 16 chars");
         aesKeyParsed = CryptoJS.enc.Utf8.parse(k);
         document.getElementById("updateKeyBtn").style.display = "none";
-        document.getElementById("confirmBtn").style.display = "block";
+        // Only show confirm if they have already tried using the trackpad
+        if (hasActivatedOnce) {
+            document.getElementById("confirmBtn").style.display = "block";
+        }
       };
 
       async function openDB() { return new Promise((r) => { let q = indexedDB.open(dbName, 1); q.onupgradeneeded = () => q.result.createObjectStore(storeName); q.onsuccess = () => r(q.result); }); }
@@ -340,11 +344,6 @@
           document.getElementById("ota-panel").style.display = "block";
           hasAttemptedConnection = true;
 
-          const savedKey = await getKeyFromDB();
-          if (!savedKey) {
-            document.getElementById("confirmBtn").style.display = "block";
-          }
-          
           loadGitHubFiles();
           device.addEventListener("gattserverdisconnected", () => { location.reload(); });
         } catch (e) {
@@ -362,16 +361,21 @@
 
       // --- TRACKPAD & MOUSE ---
       const card = document.getElementById("trackpad-card");
-      card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
+      card.onclick = () => { 
+        if (mouseChar) {
+            card.requestPointerLock();
+            hasActivatedOnce = true; // User has interacted with the controls
+        }
+      };
       
       document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
         document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
-        // Return visibility logic
-        if (!locked && hasAttemptedConnection && document.getElementById("keyWrapper").style.display !== "none") {
-            // Only show Confirm if we aren't mid-edit
+        // Return visibility logic: Show Confirm only after user has clicked trackpad
+        if (hasAttemptedConnection && hasActivatedOnce && document.getElementById("keyWrapper").style.display !== "none") {
+            // Only show Confirm if we aren't mid-edit (Update key is not visible)
             if (document.getElementById("updateKeyBtn").style.display === "none") {
                 document.getElementById("confirmBtn").style.display = "block";
             }
