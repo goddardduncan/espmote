@@ -289,7 +289,7 @@ const storeName = "KeyStore";
 
 let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
 let hasAttemptedConnection = false;
-let mouseSensitivity = 2.0; // Dynamic sensitivity state
+let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
 
 const UUIDS = {
   SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -369,6 +369,8 @@ window.onload = async () => {
     document.getElementById("changeKeyBtn").style.display = "none";
     updateActiveKey(); 
   }
+  slider.value = mouseSensitivity;
+  sensDisplay.innerText = mouseSensitivity.toFixed(1);
 };
 
 // --- BLE & ENCRYPTION ---
