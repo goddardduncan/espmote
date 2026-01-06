@@ -411,7 +411,9 @@
 
           // MAC CMD / WINDOWS CTRL SUPPORT
           if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
-            sendEncrypted(keyChar, new Uint8Array([107, 128, 3, e.key.toLowerCase().charCodeAt(0)]));
+            // Mode 3 for Ctrl, Mode 4 for Cmd (Meta)
+            let mode = e.metaKey ? 4 : 3; 
+            sendEncrypted(keyChar, new Uint8Array([107, 128, mode, e.key.toLowerCase().charCodeAt(0)]));
             return;
           }
 
