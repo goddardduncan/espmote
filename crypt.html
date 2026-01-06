@@ -358,6 +358,7 @@
       };
 
       // --- TRACKPAD & MOUSE ---
+      
       const card = document.getElementById("trackpad-card");
       card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
       
@@ -370,10 +371,14 @@
             document.getElementById("confirmBtn").style.display = "block";
         }
       });
-
       document.addEventListener("mousemove", (e) => {
-        if (document.pointerLockElement === card)
-          sendEncrypted(mouseChar, new Int8Array([109, e.movementX, e.movementY]));
+        if (document.pointerLockElement === card) {
+          // Scale the movement values before sending
+          const sensitivity = 1.5;
+          const scaledX = Math.round(e.movementX * sensitivity);
+          const scaledY = Math.round(e.movementY * sensitivity);    
+          sendEncrypted(mouseChar, new Int8Array([109, scaledX, scaledY]));
+        }
       });
       document.addEventListener("mousedown", (e) => {
         if (document.pointerLockElement === card)
