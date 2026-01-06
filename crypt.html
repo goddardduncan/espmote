@@ -265,13 +265,34 @@ const UUIDS = {
   OTA: "6e400004-b5a3-f393-e0a9-e50e24dcca9e",
 };
 
-// --- UI TOGGLES ---
+// --- UI & KEY MANAGEMENT ---
+
 function togglePassword() {
   const input = document.getElementById("aesKey");
   input.type = input.type === "password" ? "text" : "password";
 }
 
-// --- SECURE STORAGE LOGIC (IndexedDB) ---
+function updateActiveKey() {
+  const kVal = document.getElementById("aesKey").value;
+  if (kVal.length !== 16) {
+    alert("Key must be exactly 16 characters.");
+    return false;
+  }
+  aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
+  return true;
+}
+
+function showSetupButtons() {
+  const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
+  // Only show buttons if connected and key isn't permanently locked in yet
+  if (hasAttemptedConnection && !isKeySaved) {
+    document.getElementById("changeKeyBtn").style.display = "inline-block";
+    document.getElementById("confirmBtn").style.display = "inline-block";
+  }
+}
+
+// --- SECURE STORAGE (IndexedDB) ---
+
 async function openDB() {
   return new Promise((resolve) => {
     let request = indexedDB.open(dbName, 1);
@@ -299,28 +320,19 @@ function resetApp() {
   location.reload();
 }
 
-// --- KEY UPDATER ---
-function updateActiveKey() {
-  const kVal = document.getElementById("aesKey").value;
-  if (kVal.length !== 16) {
-    alert("Key must be exactly 16 characters.");
-    return false;
-  }
-  aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
-  return true;
-}
-
 window.onload = async () => {
   const savedKey = await getKeyFromDB();
   if (savedKey) {
     document.getElementById("aesKey").value = savedKey;
     document.getElementById("keyWrapper").style.display = "none";
     document.getElementById("confirmBtn").style.display = "none";
-    updateActiveKey(); // Pre-parse the saved key
+    document.getElementById("changeKeyBtn").style.display = "none";
+    updateActiveKey(); 
   }
 };
 
-// --- ENCRYPTION & BLE ---
+// --- BLE & ENCRYPTION ---
+
 async function sendEncrypted(characteristic, dataArray) {
   if (!characteristic || !aesKeyParsed) return;
   const randomIV = CryptoJS.lib.WordArray.random(16);
@@ -338,7 +350,7 @@ async function sendEncrypted(characteristic, dataArray) {
   try {
     await characteristic.writeValueWithoutResponse(combined);
   } catch (e) {
-    console.error("BLE Send Error:", e);
+    console.error("Transmission Error:", e);
   }
 }
 
@@ -360,23 +372,22 @@ document.getElementById("connectBtn").onclick = async () => {
     document.getElementById("connectBtn").style.display = "none";
     document.getElementById("ota-panel").style.display = "block";
     
-    // Show "Change Key" only if the key isn't permanently saved yet
-    if (document.getElementById("keyWrapper").style.display !== "none") {
-        document.getElementById("changeKeyBtn").style.display = "inline-block";
-    }
-
     hasAttemptedConnection = true;
+    showSetupButtons(); // Make Change and Confirm visible immediately
+
     loadGitHubFiles();
     device.addEventListener("gattserverdisconnected", () => { location.reload(); });
   } catch (e) {
-    document.getElementById("status").innerText = e.message;
+    document.getElementById("status").innerText = "Error: " + e.message;
   }
 };
 
-// Handle "Change Key" button
 document.getElementById("changeKeyBtn").onclick = () => {
   if (updateActiveKey()) {
-    alert("AES Key Updated. Test the trackpad again.");
+    const btn = document.getElementById("changeKeyBtn");
+    const originalText = btn.innerText;
+    btn.innerText = "Key Updated!";
+    setTimeout(() => btn.innerText = originalText, 1500);
   }
 };
 
@@ -391,7 +402,8 @@ document.getElementById("confirmBtn").onclick = async () => {
   }
 };
 
-// --- TRACKPAD & MOUSE ---
+// --- TRACKPAD & INPUT ---
+
 const card = document.getElementById("trackpad-card");
 card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
 
@@ -400,10 +412,12 @@ document.addEventListener("pointerlockchange", () => {
   card.classList.toggle("active", locked);
   document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
 
-  // Logic: If user unlocks and haven't saved their key yet, show the "Confirm" button
-  const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
-  if (!locked && hasAttemptedConnection && !isKeySaved) {
-    document.getElementById("confirmBtn").style.display = "inline-block";
+  if (!locked) {
+    showSetupButtons(); // Re-show buttons when exiting pointer lock
+  } else {
+    // Hide buttons during active use to maximize space/cleanliness
+    document.getElementById("changeKeyBtn").style.display = "none";
+    document.getElementById("confirmBtn").style.display = "none";
   }
 });
 
@@ -431,7 +445,8 @@ document.addEventListener("wheel", (e) => {
     sendEncrypted(mouseChar, new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
 }, { passive: false });
 
-// --- KEYBOARD LOGIC ---
+// --- KEYBOARD ---
+
 let tickCount = 0, tickTime;
 document.addEventListener("keydown", (e) => {
   if (document.pointerLockElement === card && keyChar) {
@@ -466,7 +481,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// --- OTA ---
+// --- FIRMWARE OTA ---
+
 async function loadGitHubFiles() {
   try {
     const response = await fetch(REPO_API_URL);
@@ -488,7 +504,7 @@ async function loadGitHubFiles() {
       };
       list.appendChild(div);
     });
-  } catch (e) { document.getElementById("fileList").innerText = "Error loading GitHub."; }
+  } catch (e) { document.getElementById("fileList").innerText = "Error loading builds."; }
 }
 
 function toggleOTA() {
