@@ -306,6 +306,8 @@ const sensDisplay = document.getElementById("sensValue");
 slider.oninput = (e) => {
   mouseSensitivity = parseFloat(e.target.value);
   sensDisplay.innerText = mouseSensitivity.toFixed(1);
+  // Save to local storage
+  localStorage.setItem("mouseSensitivity", mouseSensitivity);
 };
 
 function togglePassword() {
