@@ -372,6 +372,12 @@
           document.getElementById("connectBtn").style.display = "none";
           document.getElementById("ota-panel").style.display = "block";
           hasAttemptedConnection = true;
+
+          const savedKey = await getKeyFromDB();
+          if (!savedKey) {
+            document.getElementById("confirmBtn").style.display = "block";
+          }
+          
           loadGitHubFiles();
           device.addEventListener("gattserverdisconnected", () => { location.reload(); });
         } catch (e) {
