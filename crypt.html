@@ -423,7 +423,7 @@ document.addEventListener("pointerlockchange", () => {
 
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === card) {
-    const sensitivity = 1.5;
+    const sensitivity = 2;
     const scaledX = Math.round(e.movementX * sensitivity);
     const scaledY = Math.round(e.movementY * sensitivity);
     sendEncrypted(mouseChar, new Int8Array([109, scaledX, scaledY]));
