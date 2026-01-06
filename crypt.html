@@ -263,7 +263,6 @@
       
       let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
       let hasAttemptedConnection = false;
-      let hasActivatedOnce = false; // Tracks if the user has clicked the trackpad
 
       const UUIDS = {
         SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -273,36 +272,66 @@
       };
 
       // --- UI TOGGLES ---
-      function togglePassword() { const i = document.getElementById("aesKey"); i.type = i.type === "password" ? "text" : "password"; }
-      
-      // INPUT MONITOR: If typing occurs, hide Confirm and show Update
+      function togglePassword() {
+        const input = document.getElementById("aesKey");
+        input.type = input.type === "password" ? "text" : "password";
+      }
+
+      // --- NEW KEY INPUT LOGIC ---
       document.getElementById("aesKey").addEventListener("input", () => {
+        // If the user changes the key, hide confirm and show "Update Key"
         if (hasAttemptedConnection) {
           document.getElementById("confirmBtn").style.display = "none";
           document.getElementById("updateKeyBtn").style.display = "block";
         }
       });
 
-      // UPDATE KEY: Applies the new key to current session
       document.getElementById("updateKeyBtn").onclick = () => {
-        const k = document.getElementById("aesKey").value;
-        if (k.length !== 16) return alert("Key must be 16 chars");
-        aesKeyParsed = CryptoJS.enc.Utf8.parse(k);
+        const kVal = document.getElementById("aesKey").value;
+        if (kVal.length !== 16) return alert("Key must be 16 chars");
+        
+        // Update current session encryption key
+        aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
+        
+        // Swap buttons back so user can test and then confirm
         document.getElementById("updateKeyBtn").style.display = "none";
-        // Only show confirm if they have already tried using the trackpad
-        if (hasActivatedOnce) {
-            document.getElementById("confirmBtn").style.display = "block";
-        }
+        document.getElementById("confirmBtn").style.display = "block";
       };
 
-      async function openDB() { return new Promise((r) => { let q = indexedDB.open(dbName, 1); q.onupgradeneeded = () => q.result.createObjectStore(storeName); q.onsuccess = () => r(q.result); }); }
-      async function saveKeyToDB(k) { const db = await openDB(); db.transaction(storeName, "readwrite").objectStore(storeName).put(k, "user_aes_key"); }
-      async function getKeyFromDB() { const db = await openDB(); return new Promise((r) => { const req = db.transaction(storeName).objectStore(storeName).get("user_aes_key"); req.onsuccess = () => r(req.result); }); }
-      function resetApp() { indexedDB.deleteDatabase(dbName); location.reload(); }
+      // --- SECURE STORAGE LOGIC (IndexedDB) ---
+      async function openDB() {
+        return new Promise((resolve) => {
+          let request = indexedDB.open(dbName, 1);
+          request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+          request.onsuccess = () => resolve(request.result);
+        });
+      }
+
+      async function saveKeyToDB(keyStr) {
+        const db = await openDB();
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(keyStr, "user_aes_key");
+      }
+
+      async function getKeyFromDB() {
+        const db = await openDB();
+        return new Promise((resolve) => {
+          const req = db.transaction(storeName).objectStore(storeName).get("user_aes_key");
+          req.onsuccess = () => resolve(req.result);
+        });
+      }
+
+      function resetApp() {
+        indexedDB.deleteDatabase(dbName);
+        location.reload();
+      }
 
       window.onload = async () => {
-        const k = await getKeyFromDB();
-        if (k) { document.getElementById("aesKey").value = k; document.getElementById("keyWrapper").style.display = "none"; }
+        const savedKey = await getKeyFromDB();
+        if (savedKey) {
+          document.getElementById("aesKey").value = savedKey;
+          document.getElementById("keyWrapper").style.display = "none";
+        }
       };
 
       // --- ENCRYPTION & BLE ---
@@ -343,7 +372,6 @@
           document.getElementById("connectBtn").style.display = "none";
           document.getElementById("ota-panel").style.display = "block";
           hasAttemptedConnection = true;
-
           loadGitHubFiles();
           device.addEventListener("gattserverdisconnected", () => { location.reload(); });
         } catch (e) {
@@ -361,21 +389,16 @@
 
       // --- TRACKPAD & MOUSE ---
       const card = document.getElementById("trackpad-card");
-      card.onclick = () => { 
-        if (mouseChar) {
-            card.requestPointerLock();
-            hasActivatedOnce = true; // User has interacted with the controls
-        }
-      };
+      card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
       
       document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
         document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
-        // Return visibility logic: Show Confirm only after user has clicked trackpad
-        if (hasAttemptedConnection && hasActivatedOnce && document.getElementById("keyWrapper").style.display !== "none") {
-            // Only show Confirm if we aren't mid-edit (Update key is not visible)
+        // Return visibility logic
+        if (!locked && hasAttemptedConnection && document.getElementById("keyWrapper").style.display !== "none") {
+            // Only show Confirm if we aren't mid-edit
             if (document.getElementById("updateKeyBtn").style.display === "none") {
                 document.getElementById("confirmBtn").style.display = "block";
             }
