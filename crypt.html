@@ -84,11 +84,8 @@
         background: #34a853;
         display: none; 
       }
-      #updateKeyBtn {
-        background: var(--google-blue);
-        display: none;
-      }
 
+      /* Key Input Container */
       .key-container {
         display: flex;
         align-items: center;
@@ -97,9 +94,6 @@
         border-radius: 12px;
         padding: 2px 10px;
         margin-bottom: 10px;
-        width: 85vw;
-        max-width: 450px;
-        box-sizing: border-box;
       }
       #aesKey {
         border: none;
@@ -107,10 +101,8 @@
         outline: none;
         text-align: center;
         font-family: monospace;
-        flex-grow: 1;
+        width: 160px;
         font-size: 14px;
-        background: transparent;
-        min-width: 0; 
       }
       .toggle-pass {
         cursor: pointer;
@@ -228,7 +220,6 @@
         <span class="toggle-pass" onclick="togglePassword()">👁️</span>
     </div>
 
-    <button id="updateKeyBtn" class="btn">Update Key</button>
     <button id="confirmBtn" class="btn">Confirm controls are active</button>
     <button id="connectBtn" class="btn">Connect Bluetooth</button>
 
@@ -276,27 +267,6 @@
         const input = document.getElementById("aesKey");
         input.type = input.type === "password" ? "text" : "password";
       }
-
-      // --- NEW KEY INPUT LOGIC ---
-      document.getElementById("aesKey").addEventListener("input", () => {
-        // If the user changes the key, hide confirm and show "Update Key"
-        if (hasAttemptedConnection) {
-          document.getElementById("confirmBtn").style.display = "none";
-          document.getElementById("updateKeyBtn").style.display = "block";
-        }
-      });
-
-      document.getElementById("updateKeyBtn").onclick = () => {
-        const kVal = document.getElementById("aesKey").value;
-        if (kVal.length !== 16) return alert("Key must be 16 chars");
-        
-        // Update current session encryption key
-        aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
-        
-        // Swap buttons back so user can test and then confirm
-        document.getElementById("updateKeyBtn").style.display = "none";
-        document.getElementById("confirmBtn").style.display = "block";
-      };
 
       // --- SECURE STORAGE LOGIC (IndexedDB) ---
       async function openDB() {
@@ -388,6 +358,7 @@
       };
 
       // --- TRACKPAD & MOUSE ---
+      
       const card = document.getElementById("trackpad-card");
       card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
       
@@ -396,16 +367,13 @@
         card.classList.toggle("active", locked);
         document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
-        // Return visibility logic
         if (!locked && hasAttemptedConnection && document.getElementById("keyWrapper").style.display !== "none") {
-            // Only show Confirm if we aren't mid-edit
-            if (document.getElementById("updateKeyBtn").style.display === "none") {
-                document.getElementById("confirmBtn").style.display = "block";
-            }
+            document.getElementById("confirmBtn").style.display = "block";
         }
       });
       document.addEventListener("mousemove", (e) => {
         if (document.pointerLockElement === card) {
+          // Scale the movement values before sending
           const sensitivity = 1.5;
           const scaledX = Math.round(e.movementX * sensitivity);
           const scaledY = Math.round(e.movementY * sensitivity);    
@@ -446,7 +414,9 @@
             return;
           }
 
+          // MAC CMD / WINDOWS CTRL SUPPORT
           if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
+            // Mode 3 for Ctrl, Mode 4 for Cmd (Meta)
             let mode = e.metaKey ? 4 : 3; 
             sendEncrypted(keyChar, new Uint8Array([107, 128, mode, e.key.toLowerCase().charCodeAt(0)]));
             return;
