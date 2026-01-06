@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>XIAO Remote</title>
+    <title>XIAO Remote Secure</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
       :root {
@@ -52,7 +52,6 @@
         cursor: crosshair;
         transition: all 0.3s ease;
         position: relative;
-        margin: 10px 0;
       }
       #trackpad-card.active {
         border: 2px solid var(--google-blue);
@@ -71,25 +70,45 @@
         transition: 0.2s;
         margin: 5px;
       }
-      .btn:disabled { background: #ccc; cursor: not-allowed; }
-
-      .btn-ota { background: #34a853; width: 100%; margin-top: 10px; }
+      .btn-ota {
+        background: #34a853;
+        width: 100%;
+        margin-top: 10px;
+      }
+      .btn-ota:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
       
-      #confirm-area {
-        display: none;
-        flex-direction: column;
+      #confirmBtn {
+        background: #34a853;
+        display: none; 
+      }
+
+      /* Key Input Container */
+      .key-container {
+        display: flex;
         align-items: center;
+        background: white;
+        border: 1px solid #dadce0;
+        border-radius: 12px;
+        padding: 2px 10px;
         margin-bottom: 10px;
       }
-      .btn-confirm { background: #34a853; }
-
       #aesKey {
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #dadce0;
-        margin-bottom: 10px;
+        border: none;
+        padding: 8px;
+        outline: none;
         text-align: center;
-        letter-spacing: 2px;
+        font-family: monospace;
+        width: 160px;
+        font-size: 14px;
+      }
+      .toggle-pass {
+        cursor: pointer;
+        font-size: 18px;
+        user-select: none;
+        padding: 5px;
       }
 
       .shortcut-hint {
@@ -106,7 +125,9 @@
         opacity: 0;
         pointer-events: none;
       }
-      #trackpad-card.active .shortcut-hint { opacity: 1; }
+      #trackpad-card.active .shortcut-hint {
+        opacity: 1;
+      }
       .key-cap {
         background: #fff;
         border: 1px solid #bdc1c6;
@@ -129,10 +150,9 @@
         font-size: 12px;
         cursor: pointer;
         text-decoration: underline;
-        margin-top: 10px;
+        margin-bottom: 10px;
         display: block;
       }
-
       #ota-controls {
         display: none;
         background: #fff;
@@ -195,12 +215,12 @@
       <div id="status">Ready to connect</div>
     </div>
 
-    <input type="password" id="aesKey" placeholder="Enter 16-char Key" maxlength="16" />
-    
-    <div id="confirm-area">
-      <button id="confirmBtn" class="btn btn-confirm">Confirm controls are active</button>
+    <div class="key-container" id="keyWrapper">
+        <input type="password" id="aesKey" placeholder="16-character key" maxlength="16" />
+        <span class="toggle-pass" onclick="togglePassword()">👁️</span>
     </div>
 
+    <button id="confirmBtn" class="btn">Confirm controls are active</button>
     <button id="connectBtn" class="btn">Connect Bluetooth</button>
 
     <div id="trackpad-card">
@@ -224,11 +244,14 @@
     </div>
 
     <div class="footer">
-        <span class="reset-link" onclick="resetKey()">Reset Key & Reconfigure</span>
+        <span class="reset-link" onclick="resetApp()">Reset Key (Wipe Secure Storage)</span>
     </div>
 
     <script>
       const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+      const dbName = "XiaoSecureDB";
+      const storeName = "KeyStore";
+      
       let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
       let hasAttemptedConnection = false;
 
@@ -239,23 +262,49 @@
         OTA: "6e400004-b5a3-f393-e0a9-e50e24dcca9e",
       };
 
-      // --- INITIALIZATION ---
-      window.onload = () => {
-          const savedKey = localStorage.getItem("xiao_aes_key");
-          if (savedKey) {
-              document.getElementById("aesKey").value = savedKey;
-              document.getElementById("aesKey").style.display = "none";
-          }
-      };
-
-      function resetKey() {
-          localStorage.removeItem("xiao_aes_key");
-          const keyInput = document.getElementById("aesKey");
-          keyInput.value = "";
-          keyInput.style.display = "block";
-          alert("Key cleared. Please enter a new key.");
+      // --- UI TOGGLES ---
+      function togglePassword() {
+        const input = document.getElementById("aesKey");
+        input.type = input.type === "password" ? "text" : "password";
       }
 
+      // --- SECURE STORAGE LOGIC (IndexedDB) ---
+      async function openDB() {
+        return new Promise((resolve) => {
+          let request = indexedDB.open(dbName, 1);
+          request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+          request.onsuccess = () => resolve(request.result);
+        });
+      }
+
+      async function saveKeyToDB(keyStr) {
+        const db = await openDB();
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(keyStr, "user_aes_key");
+      }
+
+      async function getKeyFromDB() {
+        const db = await openDB();
+        return new Promise((resolve) => {
+          const req = db.transaction(storeName).objectStore(storeName).get("user_aes_key");
+          req.onsuccess = () => resolve(req.result);
+        });
+      }
+
+      function resetApp() {
+        indexedDB.deleteDatabase(dbName);
+        location.reload();
+      }
+
+      window.onload = async () => {
+        const savedKey = await getKeyFromDB();
+        if (savedKey) {
+          document.getElementById("aesKey").value = savedKey;
+          document.getElementById("keyWrapper").style.display = "none";
+        }
+      };
+
+      // --- ENCRYPTION & BLE ---
       async function sendEncrypted(characteristic, dataArray) {
         if (!characteristic || !aesKeyParsed) return;
         const randomIV = CryptoJS.lib.WordArray.random(16);
@@ -273,34 +322,9 @@
         try { await characteristic.writeValueWithoutResponse(combined); } catch (e) {}
       }
 
-      async function loadGitHubFiles() {
-        try {
-          const response = await fetch(REPO_API_URL);
-          const files = await response.json();
-          const list = document.getElementById("fileList");
-          list.innerHTML = "";
-          files.filter((f) => f.name.endsWith(".bin")).forEach((file) => {
-            const div = document.createElement("div");
-            div.className = "file-item";
-            div.innerHTML = `<span>📦 ${file.name}</span>`;
-            div.onclick = async () => {
-              document.getElementById("otaStatus").innerText = "Downloading...";
-              const res = await fetch(file.download_url);
-              const blob = await res.blob();
-              selectedFileArray = new Uint8Array(await blob.arrayBuffer());
-              document.getElementById("otaStatus").innerText = "Ready: " + file.name;
-              document.getElementById("updateBtn").disabled = false;
-              Array.from(list.children).forEach((c) => c.classList.remove("selected"));
-              div.classList.add("selected");
-            };
-            list.appendChild(div);
-          });
-        } catch (e) { document.getElementById("fileList").innerText = "Error loading GitHub."; }
-      }
-
       document.getElementById("connectBtn").onclick = async () => {
         const kVal = document.getElementById("aesKey").value;
-        if (kVal.length !== 16) return alert("Key must be exactly 16 chars");
+        if (kVal.length !== 16) return alert("Key must be 16 chars");
         aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
 
         try {
@@ -325,25 +349,25 @@
         }
       };
 
-      document.getElementById("confirmBtn").onclick = () => {
-          const kVal = document.getElementById("aesKey").value;
-          localStorage.setItem("xiao_aes_key", kVal);
-          document.getElementById("aesKey").style.display = "none";
-          document.getElementById("confirm-area").style.display = "none";
-          alert("Key saved successfully!");
+      document.getElementById("confirmBtn").onclick = async () => {
+        const kVal = document.getElementById("aesKey").value;
+        await saveKeyToDB(kVal);
+        document.getElementById("keyWrapper").style.display = "none";
+        document.getElementById("confirmBtn").style.display = "none";
+        alert("Key saved to secure browser storage.");
       };
 
-      // --- TRACKPAD LOGIC ---
+      // --- TRACKPAD & MOUSE ---
       const card = document.getElementById("trackpad-card");
       card.onclick = () => { if (mouseChar) card.requestPointerLock(); };
+      
       document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
         document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
-        // Show confirm button if we just exited and haven't saved the key yet
-        if (!locked && hasAttemptedConnection && !localStorage.getItem("xiao_aes_key")) {
-            document.getElementById("confirm-area").style.display = "flex";
+        if (!locked && hasAttemptedConnection && document.getElementById("keyWrapper").style.display !== "none") {
+            document.getElementById("confirmBtn").style.display = "block";
         }
       });
 
@@ -372,8 +396,7 @@
           e.preventDefault();
 
           if (e.key === "`") {
-            tickCount++;
-            clearTimeout(tickTime);
+            tickCount++; clearTimeout(tickTime);
             if (tickCount === 3) {
               sendEncrypted(keyChar, new Uint8Array([107, 27, 1]));
               tickCount = 0;
@@ -386,25 +409,45 @@
             return;
           }
 
-          if (e.ctrlKey && e.key.length === 1) {
+          // MAC CMD / WINDOWS CTRL SUPPORT
+          if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
             sendEncrypted(keyChar, new Uint8Array([107, 128, 3, e.key.toLowerCase().charCodeAt(0)]));
             return;
           }
 
           let val, mode = 0;
           const nav = { Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46 };
-          if (nav[e.key]) {
-            val = nav[e.key];
-            mode = 1;
-          } else if (e.key.length === 1) {
-            val = e.key.charCodeAt(0);
-            mode = 0;
-          }
+          if (nav[e.key]) { val = nav[e.key]; mode = 1; } 
+          else if (e.key.length === 1) { val = e.key.charCodeAt(0); mode = 0; }
           if (val !== undefined) sendEncrypted(keyChar, new Uint8Array([107, val, mode]));
         }
       });
 
-      // --- OTA LOGIC ---
+      // --- OTA ---
+      async function loadGitHubFiles() {
+        try {
+          const response = await fetch(REPO_API_URL);
+          const files = await response.json();
+          const list = document.getElementById("fileList");
+          list.innerHTML = "";
+          files.filter((f) => f.name.endsWith(".bin")).forEach((file) => {
+            const div = document.createElement("div");
+            div.className = "file-item";
+            div.innerHTML = `<span>📦 ${file.name}</span>`;
+            div.onclick = async () => {
+              document.getElementById("otaStatus").innerText = "Downloading...";
+              const res = await fetch(file.download_url);
+              selectedFileArray = new Uint8Array(await (await res.blob()).arrayBuffer());
+              document.getElementById("otaStatus").innerText = "Ready: " + file.name;
+              document.getElementById("updateBtn").disabled = false;
+              Array.from(list.children).forEach((c) => c.classList.remove("selected"));
+              div.classList.add("selected");
+            };
+            list.appendChild(div);
+          });
+        } catch (e) { document.getElementById("fileList").innerText = "Error loading GitHub."; }
+      }
+
       function toggleOTA() {
         const c = document.getElementById("ota-controls");
         c.style.display = c.style.display === "flex" ? "none" : "flex";
@@ -413,25 +456,20 @@
       document.getElementById("updateBtn").onclick = async () => {
         if (!selectedFileArray || !otaChar) return;
         document.getElementById("pBar").style.display = "block";
-        document.getElementById("updateBtn").disabled = true;
-
         const beginMsg = new Uint8Array(5);
-        beginMsg[0] = 66; // 'B'
+        beginMsg[0] = 66; 
         new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
         await otaChar.writeValue(beginMsg);
-
-        const chunkSize = 128;
-        for (let i = 0; i < selectedFileArray.length; i += chunkSize) {
-          const chunk = selectedFileArray.slice(i, i + chunkSize);
+        for (let i = 0; i < selectedFileArray.length; i += 128) {
+          const chunk = selectedFileArray.slice(i, i + 128);
           const dataMsg = new Uint8Array(chunk.length + 1);
-          dataMsg[0] = 68; // 'D'
-          dataMsg.set(chunk, 1);
+          dataMsg[0] = 68; dataMsg.set(chunk, 1);
           await otaChar.writeValue(dataMsg);
           let pct = Math.round((i / selectedFileArray.length) * 100);
           document.getElementById("pFill").style.width = pct + "%";
           document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
         }
-        await otaChar.writeValue(new Uint8Array([69])); // 'E'
+        await otaChar.writeValue(new Uint8Array([69]));
         document.getElementById("otaStatus").innerText = "Success! Rebooting...";
       };
     </script>
