@@ -272,66 +272,33 @@
       };
 
       // --- UI TOGGLES ---
-      function togglePassword() {
-        const input = document.getElementById("aesKey");
-        input.type = input.type === "password" ? "text" : "password";
-      }
-
-      // --- NEW KEY INPUT LOGIC ---
+      function togglePassword() { const i = document.getElementById("aesKey"); i.type = i.type === "password" ? "text" : "password"; }
+      
+      // INPUT MONITOR: If typing occurs, hide Confirm and show Update
       document.getElementById("aesKey").addEventListener("input", () => {
-        // If the user changes the key, hide confirm and show "Update Key"
         if (hasAttemptedConnection) {
           document.getElementById("confirmBtn").style.display = "none";
           document.getElementById("updateKeyBtn").style.display = "block";
         }
       });
 
+      // UPDATE KEY: Applies the new key to current session
       document.getElementById("updateKeyBtn").onclick = () => {
-        const kVal = document.getElementById("aesKey").value;
-        if (kVal.length !== 16) return alert("Key must be 16 chars");
-        
-        // Update current session encryption key
-        aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
-        
-        // Swap buttons back so user can test and then confirm
+        const k = document.getElementById("aesKey").value;
+        if (k.length !== 16) return alert("Key must be 16 chars");
+        aesKeyParsed = CryptoJS.enc.Utf8.parse(k);
         document.getElementById("updateKeyBtn").style.display = "none";
         document.getElementById("confirmBtn").style.display = "block";
       };
 
-      // --- SECURE STORAGE LOGIC (IndexedDB) ---
-      async function openDB() {
-        return new Promise((resolve) => {
-          let request = indexedDB.open(dbName, 1);
-          request.onupgradeneeded = () => request.result.createObjectStore(storeName);
-          request.onsuccess = () => resolve(request.result);
-        });
-      }
-
-      async function saveKeyToDB(keyStr) {
-        const db = await openDB();
-        const tx = db.transaction(storeName, "readwrite");
-        tx.objectStore(storeName).put(keyStr, "user_aes_key");
-      }
-
-      async function getKeyFromDB() {
-        const db = await openDB();
-        return new Promise((resolve) => {
-          const req = db.transaction(storeName).objectStore(storeName).get("user_aes_key");
-          req.onsuccess = () => resolve(req.result);
-        });
-      }
-
-      function resetApp() {
-        indexedDB.deleteDatabase(dbName);
-        location.reload();
-      }
+      async function openDB() { return new Promise((r) => { let q = indexedDB.open(dbName, 1); q.onupgradeneeded = () => q.result.createObjectStore(storeName); q.onsuccess = () => r(q.result); }); }
+      async function saveKeyToDB(k) { const db = await openDB(); db.transaction(storeName, "readwrite").objectStore(storeName).put(k, "user_aes_key"); }
+      async function getKeyFromDB() { const db = await openDB(); return new Promise((r) => { const req = db.transaction(storeName).objectStore(storeName).get("user_aes_key"); req.onsuccess = () => r(req.result); }); }
+      function resetApp() { indexedDB.deleteDatabase(dbName); location.reload(); }
 
       window.onload = async () => {
-        const savedKey = await getKeyFromDB();
-        if (savedKey) {
-          document.getElementById("aesKey").value = savedKey;
-          document.getElementById("keyWrapper").style.display = "none";
-        }
+        const k = await getKeyFromDB();
+        if (k) { document.getElementById("aesKey").value = k; document.getElementById("keyWrapper").style.display = "none"; }
       };
 
       // --- ENCRYPTION & BLE ---
