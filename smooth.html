@@ -323,12 +323,6 @@ const SCROLL = {
   maxSteps: 6
 };
 
-
-const SCROLL_DECAY = {
-  rate: 0.95,      // closer to 1 = slower decay
-  idleMs: 40       // wait this long after last wheel input
-};
-
 function accelCurve(speed) {
   return 1 + (1 / (1 + Math.exp(
     -TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)
@@ -597,28 +591,29 @@ document.addEventListener("wheel", (e) => {
   if (e.deltaMode === 1) delta *= 16;
   if (e.deltaMode === 2) delta *= 100;
 
-  // Accumulate fractional scroll
-  scrollRemainder *= Math.pow(scrollDecay, dt / 16);
+  // Apply curve + scale
+  const curved = scrollCurve(delta) * SCROLL.scale;
+
+  // Accumulate
+  scrollRemainder += curved;
 
   // Extract whole steps
-  let steps = Math.floor(scrollRemainder);
+  let steps = Math.floor(Math.abs(scrollRemainder));
 
   if (steps === 0) return;
 
-  // Remove emitted steps from remainder
-  scrollRemainder -= steps;
-
-  // Clamp burst size
+  // Clamp burst
   steps = Math.min(steps, SCROLL.maxSteps);
 
   const direction = delta > 0 ? -1 : 1;
+
+  // Remove emitted steps
+  scrollRemainder -= steps * Math.sign(scrollRemainder);
 
   for (let i = 0; i < steps; i++) {
     sendEncrypted(mouseChar, new Int8Array([115, direction]));
   }
 }, { passive: false });
-
-
 
 // --- KEYBOARD ---
 
@@ -710,12 +705,12 @@ document.getElementById("updateBtn").onclick = async () => {
 function decayScrollRemainder() {
   const now = performance.now();
 
-  // Only decay when fingers are off the trackpad
-  if (now - lastScrollTime > SCROLL_DECAY.idleMs) {
-    scrollRemainder *= SCROLL_DECAY.rate;
+  // Only decay when idle
+  if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
+    const dt = now - lastScrollTime;
+    scrollRemainder *= Math.pow(scrollDecay, dt / 16);
 
-    // Kill tiny noise
-    if (scrollRemainder < 0.001) {
+    if (Math.abs(scrollRemainder) < 0.01) {
       scrollRemainder = 0;
     }
   }
