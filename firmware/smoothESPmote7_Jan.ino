@@ -94,6 +94,22 @@ void decryptAndHandle(uint8_t* data, size_t len, String uuid) {
                         case 39: Keyboard.press(KEY_RIGHT_ARROW); break;
                         case 40: Keyboard.press(KEY_DOWN_ARROW); break;
                         case 46: Keyboard.press(KEY_DELETE); break;
+                        case 36: Keyboard.press(KEY_HOME); break;
+                        case 35: Keyboard.press(KEY_END); break;
+                        case 33: Keyboard.press(KEY_PAGE_UP); break;
+                        case 34: Keyboard.press(KEY_PAGE_DOWN); break;
+                        case 112: Keyboard.press(KEY_F1); break;
+                        case 113: Keyboard.press(KEY_F2); break;
+                        case 114: Keyboard.press(KEY_F3); break;
+                        case 115: Keyboard.press(KEY_F4); break;
+                        case 116: Keyboard.press(KEY_F5); break;
+                        case 117: Keyboard.press(KEY_F6); break;
+                        case 118: Keyboard.press(KEY_F7); break;
+                        case 119: Keyboard.press(KEY_F8); break;
+                        case 120: Keyboard.press(KEY_F9); break;
+                        case 121: Keyboard.press(KEY_F10); break;
+                        case 122: Keyboard.press(KEY_F11); break;
+                        case 123: Keyboard.press(KEY_F12); break;
                     }
                 } else { 
                     Keyboard.press((char)val);
