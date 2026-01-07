@@ -782,15 +782,6 @@
           return;
         }
 
-        if (/^F\d+$/.test(e.key)) {
-        e.preventDefault();
-          const fNumber = parseInt(e.key.slice(1));
-          // HID/ASCII mapping for F1 (112) through F12 (123)
-          const keyCode = 111 + fNumber; 
-          sendEncrypted(keyChar, new Uint8Array([107, keyCode, 1, mod]));
-          return;
-        }
-
         e.preventDefault();
 
         // 4. SHORTCUTS (Cmd+C, Cmd+V, Cmd+1)
@@ -816,7 +807,10 @@
           Home: 36,
           End: 35,
           PageUp: 33,
-          PageDown: 34
+          PageDown: 34,
+          // Your F-key mappings:
+          F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
+          F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123
         };
         if (nav[e.key]) {
           sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
