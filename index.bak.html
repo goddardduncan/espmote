@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>moteMote | Remote</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+      :root {
+        --google-blue: #4285f4;
+        --bg-gray: #f8f9fa;
+        --text-dark: #3c4043;
+        --card-bg: #ffffff;
+      }
+      body {
+        background-color: var(--bg-gray);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        min-height: 100vh;
+        color: var(--text-dark);
+        overflow-y: auto;
+        touch-action: none;
+      }
+      .header {
+        text-align: center;
+        padding-top: 20px;
+      }
+
+      #status {
+        font-size: 13px;
+        color: #5f6368;
+        margin-top: 4px;
+      }
+
+      /* Sensitivity Slider Styling */
+      .sensitivity-container {
+        width: 85vw;
+        max-width: 450px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 15px;
+        padding: 8px 16px;
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #dadce0;
+        font-size: 14px;
+        color: #5f6368;
+      }
+      #sensSlider {
+        flex-grow: 1;
+        accent-color: var(--google-blue);
+        cursor: pointer;
+      }
+      #sensValue {
+        min-width: 25px;
+        font-family: monospace;
+        font-weight: bold;
+        color: var(--google-blue);
+      }
+
+      #trackpad-card {
+        background: var(--card-bg);
+        width: 85vw;
+        max-width: 450px;
+        height: 40vh;
+        border-radius: 28px;
+        border: 1px solid #dadce0;
+        box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: crosshair;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+      #trackpad-card.active {
+        border: 2px solid var(--google-blue);
+        box-shadow: 0 8px 24px rgba(66, 133, 244, 0.15);
+        transform: scale(1.01);
+      }
+
+      .btn {
+        background: var(--google-blue);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: 0.2s;
+        margin: 5px;
+      }
+      .btn-ota {
+        background: #34a853;
+        width: 100%;
+        margin-top: 10px;
+      }
+      .btn-ota:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      #confirmBtn {
+        background: #34a853;
+        display: none;
+      }
+
+      .key-container {
+        display: flex;
+        align-items: center;
+        background: white;
+        border: 1px solid #dadce0;
+        border-radius: 12px;
+        padding: 2px 10px;
+        margin-bottom: 10px;
+      }
+      #aesKey {
+        border: none;
+        padding: 8px;
+        outline: none;
+        text-align: center;
+        font-family: monospace;
+        width: 160px;
+        font-size: 14px;
+      }
+      .toggle-pass {
+        cursor: pointer;
+        font-size: 18px;
+        user-select: none;
+        padding: 5px;
+      }
+
+      .shortcut-hint {
+        position: absolute;
+        bottom: 20px;
+        font-size: 12px;
+        color: #70757a;
+        background: #f1f3f4;
+        padding: 6px 14px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #trackpad-card.active .shortcut-hint {
+        opacity: 1;
+      }
+      .key-cap {
+        background: #fff;
+        border: 1px solid #bdc1c6;
+        border-bottom-width: 3px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-family: monospace;
+      }
+
+      #ota-panel {
+        margin-top: 15px;
+        width: 85vw;
+        max-width: 450px;
+        text-align: center;
+        padding-bottom: 20px;
+        display: none;
+      }
+      .ota-toggle,
+      .reset-link {
+        color: #5f6368;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: underline;
+        margin-bottom: 10px;
+        display: block;
+      }
+      #ota-controls {
+        display: none;
+        background: #fff;
+        padding: 15px;
+        border-radius: 16px;
+        border: 1px solid #dadce0;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      #fileList {
+        max-height: 120px;
+        overflow-y: auto;
+        margin-bottom: 10px;
+        border: 1px solid #eee;
+        border-radius: 8px;
+      }
+      .file-item {
+        text-align: left;
+        font-size: 13px;
+        padding: 12px;
+        cursor: pointer;
+        background: #f8f9fa;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+      }
+      .file-item.selected {
+        background: #e8f0fe;
+        font-weight: bold;
+        color: var(--google-blue);
+        border-left: 4px solid var(--google-blue);
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: #e8eaed;
+        border-radius: 3px;
+        overflow: hidden;
+        margin: 10px 0;
+        display: none;
+      }
+      .progress-fill {
+        height: 100%;
+        background: var(--google-blue);
+        width: 0%;
+        transition: width 0.1s;
+      }
+      .footer {
+        bottom: 15px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2 style="margin: 0">moteMote</h2>
+      <div id="status">Ready to connect</div>
+    </div>
+
+    <div class="key-container" id="keyWrapper">
+      <input
+        type="password"
+        id="aesKey"
+        placeholder="16-character USBkey"
+        maxlength="16"
+      />
+      <span class="toggle-pass" onclick="togglePassword()">👁️</span>
+    </div>
+
+    <div id="button-cluster" style="display: flex; gap: 10px">
+      <button id="connectBtn" class="btn">Connect Bluetooth</button>
+      <button
+        id="changeKeyBtn"
+        class="btn"
+        style="display: none; background: #f4b400"
+      >
+        Change Key
+      </button>
+      <button id="confirmBtn" class="btn">Confirm & Save Key</button>
+    </div>
+
+    <div id="trackpad-card">
+      <div id="instr">Tap to control device</div>
+      <div class="shortcut-hint">
+        Tap <span class="key-cap">`</span> 3x for
+        <span class="key-cap">ESC</span>
+      </div>
+    </div>
+    <br />
+    <div class="sensitivity-container">
+      <label for="sensSlider">Mouse sensitivity</label>
+      <input
+        type="range"
+        id="sensSlider"
+        min="1"
+        max="3"
+        step="0.1"
+        value="2.0"
+      />
+      <span id="sensValue">2.0</span>
+    </div>
+    <div class="sensitivity-container">
+      <label>Scroll decay</label>
+      <input
+        type="range"
+        id="scrollDecay"
+        min="0.90"
+        max="0.99"
+        step="0.005"
+        value="0.95"
+      />
+      <span id="scrollDecayVal">0.95</span>
+    </div>
+    <div class="sensitivity-container">
+      <label>Scroll precision</label>
+      <input
+        type="range"
+        id="scrollBoost"
+        min="1.0"
+        max="2.5"
+        step="0.1"
+        value="1.4"
+      />
+      <span id="scrollBoostVal">1.4</span>
+    </div>
+    <div id="ota-panel">
+      <span class="ota-toggle" onclick="toggleOTA()"
+        >Developer: Update Firmware</span
+      >
+      <div id="ota-controls">
+        <div id="fileList">Loading GitHub firmware...</div>
+        <div class="progress-bar" id="pBar">
+          <div class="progress-fill" id="pFill"></div>
+        </div>
+        <button id="updateBtn" class="btn btn-ota" disabled>
+          Flash Selected Build
+        </button>
+        <div
+          id="otaStatus"
+          style="font-size: 11px; color: #5f6368; margin-top: 5px"
+        >
+          Select version
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="reset-link" onclick="resetApp()">Reset PassKey</span>
+    </div>
+
+    <script>
+      const REPO_API_URL =
+        "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+      const dbName = "XiaoSecureDB";
+      const storeName = "KeyStore";
+
+      let mouseChar,
+        keyChar,
+        otaChar,
+        aesKeyParsed,
+        selectedFileArray = null;
+      let hasAttemptedConnection = false;
+      let mouseSensitivity =
+        parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
+      let lastMoveTime = performance.now();
+      let smoothX = 0;
+      let smoothY = 0;
+      let scrollRemainder = 0;
+      let lastScrollTime = 0;
+
+      const TRACKPAD = {
+        smoothing: 0.65,
+        deadzone: 0.15,
+        curveMid: 0.08,
+        curveSharpness: 10,
+      };
+
+      let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
+
+      let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+
+      const SCROLL = {
+        scale: 0.02,
+        minStep: 0.05,
+        maxSteps: 6,
+      };
+
+      function accelCurve(speed) {
+        return (
+          1 +
+          1 /
+            (1 +
+              Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)))
+        );
+      }
+
+      function scrollCurve(delta) {
+        const abs = Math.abs(delta);
+        return abs < 10 ? abs * scrollBoost : abs;
+      }
+
+      const UUIDS = {
+        SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+        MOUSE: "6e400002-b5a3-f393-e0a9-e50e24dcca9e",
+        KEY: "6e400003-b5a3-f393-e0a9-e50e24dcca9e",
+        OTA: "6e400004-b5a3-f393-e0a9-e50e24dcca9e",
+      };
+
+      // --- UI & KEY MANAGEMENT ---
+
+      const slider = document.getElementById("sensSlider");
+      const sensDisplay = document.getElementById("sensValue");
+      const decaySlider = document.getElementById("scrollDecay");
+      const decayLabel = document.getElementById("scrollDecayVal");
+      const boostSlider = document.getElementById("scrollBoost");
+      const boostLabel = document.getElementById("scrollBoostVal");
+
+      slider.oninput = (e) => {
+        mouseSensitivity = parseFloat(e.target.value);
+        sensDisplay.innerText = mouseSensitivity.toFixed(1);
+        // Save to local storage
+        localStorage.setItem("mouseSensitivity", mouseSensitivity);
+      };
+
+      decaySlider.value = scrollDecay;
+      decayLabel.textContent = scrollDecay.toFixed(3);
+
+      boostSlider.value = scrollBoost;
+      boostLabel.textContent = scrollBoost.toFixed(1);
+
+      // decay slider
+      decaySlider.oninput = (e) => {
+        scrollDecay = parseFloat(e.target.value);
+        decayLabel.textContent = scrollDecay.toFixed(3);
+        localStorage.setItem("scrollDecay", scrollDecay);
+      };
+
+      // boost slider
+      boostSlider.oninput = (e) => {
+        scrollBoost = parseFloat(e.target.value);
+        boostLabel.textContent = scrollBoost.toFixed(1);
+        localStorage.setItem("scrollBoost", scrollBoost);
+      };
+
+      function togglePassword() {
+        const input = document.getElementById("aesKey");
+        input.type = input.type === "password" ? "text" : "password";
+      }
+
+      function updateActiveKey() {
+        const kVal = document.getElementById("aesKey").value;
+        if (kVal.length !== 16) {
+          alert("Key must be exactly 16 characters.");
+          return false;
+        }
+        aesKeyParsed = CryptoJS.enc.Utf8.parse(kVal);
+        return true;
+      }
+
+      function showSetupButtons() {
+        const isKeySaved =
+          document.getElementById("keyWrapper").style.display === "none";
+        if (hasAttemptedConnection && !isKeySaved) {
+          document.getElementById("changeKeyBtn").style.display =
+            "inline-block";
+          document.getElementById("confirmBtn").style.display = "inline-block";
+        }
+      }
+
+      // --- SECURE STORAGE (IndexedDB) ---
+
+      async function openDB() {
+        return new Promise((resolve) => {
+          let request = indexedDB.open(dbName, 1);
+          request.onupgradeneeded = () =>
+            request.result.createObjectStore(storeName);
+          request.onsuccess = () => resolve(request.result);
+        });
+      }
+
+      async function saveKeyToDB(keyStr) {
+        const db = await openDB();
+        const tx = db.transaction(storeName, "readwrite");
+        tx.objectStore(storeName).put(keyStr, "user_aes_key");
+      }
+
+      async function getKeyFromDB() {
+        const db = await openDB();
+        return new Promise((resolve) => {
+          const req = db
+            .transaction(storeName)
+            .objectStore(storeName)
+            .get("user_aes_key");
+          req.onsuccess = () => resolve(req.result);
+        });
+      }
+
+      function resetApp() {
+        indexedDB.deleteDatabase(dbName);
+        location.reload();
+      }
+
+      window.onload = async () => {
+        const savedKey = await getKeyFromDB();
+        if (savedKey) {
+          document.getElementById("aesKey").value = savedKey;
+          document.getElementById("keyWrapper").style.display = "none";
+          document.getElementById("confirmBtn").style.display = "none";
+          document.getElementById("changeKeyBtn").style.display = "none";
+          updateActiveKey();
+        }
+        slider.value = mouseSensitivity;
+        sensDisplay.innerText = mouseSensitivity.toFixed(1);
+      };
+
+      // --- BLE & ENCRYPTION ---
+
+      async function sendEncrypted(characteristic, dataArray) {
+        if (!characteristic || !aesKeyParsed) return;
+        const randomIV = CryptoJS.lib.WordArray.random(16);
+        const wordArray = CryptoJS.lib.WordArray.create(dataArray);
+        const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
+          iv: randomIV,
+          mode: CryptoJS.mode.CBC,
+          padding: CryptoJS.pad.Pkcs7,
+        });
+        const ivBytes = Uint8Array.from(
+          atob(randomIV.toString(CryptoJS.enc.Base64)),
+          (c) => c.charCodeAt(0)
+        );
+        const cipherBytes = Uint8Array.from(atob(encrypted.toString()), (c) =>
+          c.charCodeAt(0)
+        );
+        const combined = new Uint8Array(ivBytes.length + cipherBytes.length);
+        combined.set(ivBytes);
+        combined.set(cipherBytes, ivBytes.length);
+        try {
+          await characteristic.writeValueWithoutResponse(combined);
+        } catch (e) {
+          console.error("Transmission Error:", e);
+        }
+      }
+
+      document.getElementById("connectBtn").onclick = async () => {
+        if (!updateActiveKey()) return;
+
+        try {
+          const device = await navigator.bluetooth.requestDevice({
+            filters: [{ namePrefix: "XIAO-" }],
+            optionalServices: [UUIDS.SERVICE],
+          });
+          const server = await device.gatt.connect();
+          const service = await server.getPrimaryService(UUIDS.SERVICE);
+          mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
+          keyChar = await service.getCharacteristic(UUIDS.KEY);
+          otaChar = await service.getCharacteristic(UUIDS.OTA);
+
+          document.getElementById("status").innerText = "Connected";
+          document.getElementById("connectBtn").style.display = "none";
+          document.getElementById("ota-panel").style.display = "block";
+
+          hasAttemptedConnection = true;
+          showSetupButtons();
+
+          loadGitHubFiles();
+          device.addEventListener("gattserverdisconnected", () => {
+            location.reload();
+          });
+        } catch (e) {
+          document.getElementById("status").innerText = "Error: " + e.message;
+        }
+      };
+
+      document.getElementById("changeKeyBtn").onclick = () => {
+        if (updateActiveKey()) {
+          const btn = document.getElementById("changeKeyBtn");
+          const originalText = btn.innerText;
+          btn.innerText = "Key Updated!";
+          setTimeout(() => (btn.innerText = originalText), 1500);
+        }
+      };
+
+      document.getElementById("confirmBtn").onclick = async () => {
+        const kVal = document.getElementById("aesKey").value;
+        if (kVal.length === 16) {
+          await saveKeyToDB(kVal);
+          document.getElementById("keyWrapper").style.display = "none";
+          document.getElementById("confirmBtn").style.display = "none";
+          document.getElementById("changeKeyBtn").style.display = "none";
+          alert("Key saved to secure browser storage.");
+        }
+      };
+
+      // --- TRACKPAD & INPUT ---
+
+      const card = document.getElementById("trackpad-card");
+      card.onclick = () => {
+        if (mouseChar) card.requestPointerLock();
+      };
+
+      document.addEventListener("pointerlockchange", () => {
+        const locked = document.pointerLockElement === card;
+        card.classList.toggle("active", locked);
+        document.getElementById("instr").innerText = locked
+          ? "Mode: Active"
+          : "Tap to control device";
+
+        if (!locked) {
+          showSetupButtons();
+        } else {
+          document.getElementById("changeKeyBtn").style.display = "none";
+          document.getElementById("confirmBtn").style.display = "none";
+        }
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (document.pointerLockElement !== card) return;
+
+        const now = performance.now();
+        const dt = Math.max(now - lastMoveTime, 1);
+        lastMoveTime = now;
+
+        const rawX = e.movementX;
+        const rawY = e.movementY;
+
+        // Velocity (px/ms)
+        const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
+
+        // Temporal smoothing
+        smoothX =
+          smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
+        smoothY =
+          smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
+
+        // Deadzone
+        if (Math.abs(smoothX) < TRACKPAD.deadzone) smoothX = 0;
+        if (Math.abs(smoothY) < TRACKPAD.deadzone) smoothY = 0;
+
+        // Acceleration
+        const accel = accelCurve(speed);
+
+        let outX = Math.round(smoothX * accel * mouseSensitivity);
+        let outY = Math.round(smoothY * accel * mouseSensitivity);
+
+        // HID safety clamp
+        outX = Math.max(-127, Math.min(127, outX));
+        outY = Math.max(-127, Math.min(127, outY));
+
+        if (outX || outY) {
+          sendEncrypted(mouseChar, new Int8Array([109, outX, outY]));
+        }
+      });
+
+      document.addEventListener("mousedown", (e) => {
+        if (document.pointerLockElement === card)
+          sendEncrypted(
+            mouseChar,
+            new Uint8Array([99, [1, 4, 2][e.button], 1])
+          );
+      });
+
+      document.addEventListener("mouseup", (e) => {
+        if (document.pointerLockElement === card)
+          sendEncrypted(
+            mouseChar,
+            new Uint8Array([99, [1, 4, 2][e.button], 0])
+          );
+      });
+
+      document.addEventListener(
+        "wheel",
+        (e) => {
+          if (document.pointerLockElement !== card) return;
+          e.preventDefault();
+
+          lastScrollTime = performance.now();
+
+          let delta = e.deltaY;
+
+          // Normalize wheel units
+          if (e.deltaMode === 1) delta *= 16;
+          if (e.deltaMode === 2) delta *= 100;
+
+          // Apply curve + scale
+          const curved = scrollCurve(delta) * SCROLL.scale;
+
+          // Accumulate
+          scrollRemainder += curved;
+
+          // Extract whole steps
+          let steps = Math.floor(Math.abs(scrollRemainder));
+
+          if (steps === 0) return;
+
+          // Clamp burst
+          steps = Math.min(steps, SCROLL.maxSteps);
+
+          const direction = delta > 0 ? -1 : 1;
+
+          // Remove emitted steps
+          scrollRemainder -= steps * Math.sign(scrollRemainder);
+
+          for (let i = 0; i < steps; i++) {
+            sendEncrypted(mouseChar, new Int8Array([115, direction]));
+          }
+        },
+        { passive: false }
+      );
+
+// --- FINAL STABLE KEYBOARD LOGIC ---
+      let tickCount = 0, tickTime;
+
+      document.addEventListener("keydown", (e) => {
+        if (document.pointerLockElement !== card || !keyChar) return;
+
+        // 1. Calculate Bitmask (Only used for Mode 0 and 1)
+        let mod = 0;
+        if (e.shiftKey) mod |= 1;
+        if (e.ctrlKey)  mod |= 2;
+        if (e.altKey)   mod |= 4;
+        if (e.metaKey)  mod |= 8;
+
+        // 2. BROWSER REMAPS (Ctrl -> Cmd)
+        if (e.ctrlKey && e.key === "`") {
+          e.preventDefault(); 
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); // Mode 4, Key 96
+          return;
+        }
+        if (e.ctrlKey && e.key === "Tab") {
+          e.preventDefault();
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));  // Mode 4, Key 9
+          return;
+        }
+
+        // 3. ESC LOGIC (``` -> ESC)
+        if (e.key === "`") {
+          e.preventDefault();
+          tickCount++;
+          clearTimeout(tickTime);
+          if (tickCount === 3) {
+            sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0])); 
+            tickCount = 0;
+          } else {
+            tickTime = setTimeout(() => {
+              if (tickCount === 1) sendEncrypted(keyChar, new Uint8Array([107, 96, 0, mod]));
+              tickCount = 0;
+            }, 500);
+          }
+          return;
+        }
+
+        e.preventDefault();
+
+        // 4. SHORTCUTS (Cmd+C, Cmd+V, Cmd+1)
+        // Note: We ignore the 'mod' bitmask here and use the dedicated Mode 3/4
+        if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
+          const mode = e.metaKey ? 4 : 3;
+          const charCode = e.key.toLowerCase().charCodeAt(0);
+          sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
+          return;
+        }
+
+        // 5. NAVIGATION (Enter, Arrows, etc.)
+        const nav = { Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46 };
+        if (nav[e.key]) {
+          sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
+          return;
+        }
+
+        // 6. PLAIN TYPING
+        if (e.key.length === 1) {
+          sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
+        }
+      });
+
+      function toggleOTA() {
+        const c = document.getElementById("ota-controls");
+        c.style.display = c.style.display === "flex" ? "none" : "flex";
+      }
+
+      document.getElementById("updateBtn").onclick = async () => {
+        if (!selectedFileArray || !otaChar) return;
+        document.getElementById("pBar").style.display = "block";
+        const beginMsg = new Uint8Array(5);
+        beginMsg[0] = 66;
+        new DataView(beginMsg.buffer).setUint32(
+          1,
+          selectedFileArray.length,
+          true
+        );
+        await otaChar.writeValue(beginMsg);
+        for (let i = 0; i < selectedFileArray.length; i += 128) {
+          const chunk = selectedFileArray.slice(i, i + 128);
+          const dataMsg = new Uint8Array(chunk.length + 1);
+          dataMsg[0] = 68;
+          dataMsg.set(chunk, 1);
+          await otaChar.writeValue(dataMsg);
+          let pct = Math.round((i / selectedFileArray.length) * 100);
+          document.getElementById("pFill").style.width = pct + "%";
+          document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
+        }
+        await otaChar.writeValue(new Uint8Array([69]));
+        document.getElementById("otaStatus").innerText =
+          "Success! Rebooting...";
+      };
+
+      function decayScrollRemainder() {
+        const now = performance.now();
+
+        // Only decay when idle
+        if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
+          const dt = now - lastScrollTime;
+          scrollRemainder *= Math.pow(scrollDecay, dt / 16);
+
+          if (Math.abs(scrollRemainder) < 0.01) {
+            scrollRemainder = 0;
+          }
+        }
+
+        requestAnimationFrame(decayScrollRemainder);
+      }
+
+      decayScrollRemainder();
+    </script>
+  </body>
+</html>
