@@ -782,6 +782,15 @@
           return;
         }
 
+        if (/^F\d+$/.test(e.key)) {
+        e.preventDefault();
+          const fNumber = parseInt(e.key.slice(1));
+          // HID/ASCII mapping for F1 (112) through F12 (123)
+          const keyCode = 111 + fNumber; 
+          sendEncrypted(keyChar, new Uint8Array([107, keyCode, 1, mod]));
+          return;
+        }
+
         e.preventDefault();
 
         // 4. SHORTCUTS (Cmd+C, Cmd+V, Cmd+1)
@@ -802,7 +811,12 @@
           ArrowUp: 38,
           ArrowRight: 39,
           ArrowDown: 40,
+          Insert: 45,
           Delete: 46,
+          Home: 36,
+          End: 35,
+          PageUp: 33,
+          PageDown: 34
         };
         if (nav[e.key]) {
           sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
