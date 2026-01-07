@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -264,7 +264,16 @@
       <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0">
       <span id="sensValue">2.0</span>
     </div>
-    
+    <div class="sensitivity-container">
+      <label>Scroll decay</label>
+      <input type="range" id="scrollDecay" min="0.90" max="0.99" step="0.005" value="0.95">
+      <span id="scrollDecayVal">0.95</span>
+    </div>
+    <div class="sensitivity-container">
+      <label>Scroll precision</label>
+      <input type="range" id="scrollBoost" min="1.0" max="2.5" step="0.1" value="1.4">
+      <span id="scrollBoostVal">1.4</span>
+    </div>   
     <div id="ota-panel">
       <span class="ota-toggle" onclick="toggleOTA()">Developer: Update Firmware</span>
       <div id="ota-controls">
@@ -302,10 +311,18 @@ const TRACKPAD = {
   curveSharpness: 10
 };
 
+let scrollDecay =
+  parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
+
+let scrollBoost =
+  parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+
 const SCROLL = {
-  scale: 0.02,     // overall speed (main tuning knob)
-  maxSteps: 6       // safety clamp
+  scale: 0.02,
+  minStep: 0.05,
+  maxSteps: 6
 };
+
 
 const SCROLL_DECAY = {
   rate: 0.95,      // closer to 1 = slower decay
@@ -320,11 +337,8 @@ function accelCurve(speed) {
 
 function scrollCurve(delta) {
   const abs = Math.abs(delta);
-
-  // Boost small movements, leave big ones mostly alone
-  // Tuned for trackpads
   return abs < 10
-    ? abs * 1.4
+    ? abs * scrollBoost
     : abs;
 }
 
@@ -339,6 +353,10 @@ const UUIDS = {
 
 const slider = document.getElementById("sensSlider");
 const sensDisplay = document.getElementById("sensValue");
+const decaySlider = document.getElementById("scrollDecay");
+const decayLabel  = document.getElementById("scrollDecayVal");
+const boostSlider = document.getElementById("scrollBoost");
+const boostLabel  = document.getElementById("scrollBoostVal");
 
 slider.oninput = (e) => {
   mouseSensitivity = parseFloat(e.target.value);
@@ -347,6 +365,26 @@ slider.oninput = (e) => {
   localStorage.setItem("mouseSensitivity", mouseSensitivity);
 };
 
+decaySlider.value = scrollDecay;
+decayLabel.textContent = scrollDecay.toFixed(3);
+
+boostSlider.value = scrollBoost;
+boostLabel.textContent = scrollBoost.toFixed(1);
+
+// decay slider
+decaySlider.oninput = (e) => {
+  scrollDecay = parseFloat(e.target.value);
+  decayLabel.textContent = scrollDecay.toFixed(3);
+  localStorage.setItem("scrollDecay", scrollDecay);
+};
+
+// boost slider
+boostSlider.oninput = (e) => {
+  scrollBoost = parseFloat(e.target.value);
+  boostLabel.textContent = scrollBoost.toFixed(1);
+  localStorage.setItem("scrollBoost", scrollBoost);
+};
+      
 function togglePassword() {
   const input = document.getElementById("aesKey");
   input.type = input.type === "password" ? "text" : "password";
@@ -560,7 +598,7 @@ document.addEventListener("wheel", (e) => {
   if (e.deltaMode === 2) delta *= 100;
 
   // Accumulate fractional scroll
-  scrollRemainder += scrollCurve(delta) * SCROLL.scale;
+  scrollRemainder *= Math.pow(scrollDecay, dt / 16);
 
   // Extract whole steps
   let steps = Math.floor(scrollRemainder);
