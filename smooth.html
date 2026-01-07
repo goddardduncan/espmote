@@ -551,7 +551,7 @@ document.addEventListener("wheel", (e) => {
   if (e.deltaMode === 2) delta *= 100;
 
   // Accumulate fractional scroll
-  scrollRemainder += Math.abs(delta) * SCROLL.scale;
+  scrollRemainder += scrollCurve(delta) * SCROLL.scale;
 
   // Extract whole steps
   let steps = Math.floor(scrollRemainder);
