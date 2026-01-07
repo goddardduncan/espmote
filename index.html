@@ -698,73 +698,77 @@
 
       let tickCount = 0,
         tickTime;
+
       document.addEventListener("keydown", (e) => {
-        if (document.pointerLockElement === card && keyChar) {
-          if (e.key === "Escape") return;
+        if (document.pointerLockElement !== card || !keyChar) return;
+
+        // 🔴 browser-safe remaps FIRST
+
+        // Ctrl + ` → Cmd + `
+        if (e.ctrlKey && e.key === "`") {
           e.preventDefault();
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
+          return;
+        }
 
-          if (e.key === "`") {
-            // ⌘ + ` → cycle windows (macOS)
-            if (e.metaKey) {
-              // HID: key packet [107, keycode, mode]
-              // mode 4 = meta (⌘)
-              sendEncrypted(keyChar, new Uint8Array([107, 96, 4]));
-              return;
-            }
+        // Ctrl + Tab → Cmd + Tab
+        if (e.ctrlKey && e.key === "Tab") {
+          e.preventDefault();
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+          return;
+        }
 
-            // Existing triple-tap ESC logic
-            tickCount++;
-            clearTimeout(tickTime);
+        e.preventDefault();
 
-            if (tickCount === 3) {
-              sendEncrypted(keyChar, new Uint8Array([107, 27, 1])); // ESC
+        // --- backtick logic (no Cmd paths) ---
+        if (e.key === "`") {
+          tickCount++;
+          clearTimeout(tickTime);
+
+          if (tickCount === 3) {
+            sendEncrypted(keyChar, new Uint8Array([107, 27, 1])); // ESC
+            tickCount = 0;
+          } else {
+            tickTime = setTimeout(() => {
+              if (tickCount === 1) {
+                sendEncrypted(keyChar, new Uint8Array([107, 96, 0]));
+              }
               tickCount = 0;
-            } else {
-              tickTime = setTimeout(() => {
-                if (tickCount === 1) {
-                  sendEncrypted(keyChar, new Uint8Array([107, 96, 0])); // `
-                }
-                tickCount = 0;
-              }, 500);
-            }
-            return;
+            }, 500);
           }
+          return;
+        }
 
-          if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
-            let mode = e.metaKey ? 4 : 3;
-            sendEncrypted(
-              keyChar,
-              new Uint8Array([
-                107,
-                128,
-                mode,
-                e.key.toLowerCase().charCodeAt(0),
-              ])
-            );
-            return;
-          }
+        // Ctrl / Alt / Cmd + letter (Cmd here only comes from remaps)
+        if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
+          const mode = e.metaKey ? 4 : 3;
+          sendEncrypted(
+            keyChar,
+            new Uint8Array([107, 128, mode, e.key.toLowerCase().charCodeAt(0)])
+          );
+          return;
+        }
 
-          let val,
-            mode = 0;
-          const nav = {
-            Backspace: 8,
-            Tab: 9,
-            Enter: 13,
-            ArrowLeft: 37,
-            ArrowUp: 38,
-            ArrowRight: 39,
-            ArrowDown: 40,
-            Delete: 46,
-          };
-          if (nav[e.key]) {
-            val = nav[e.key];
-            mode = 1;
-          } else if (e.key.length === 1) {
-            val = e.key.charCodeAt(0);
-            mode = 0;
-          }
-          if (val !== undefined)
-            sendEncrypted(keyChar, new Uint8Array([107, val, mode]));
+        // Navigation keys
+        const nav = {
+          Backspace: 8,
+          Tab: 9,
+          Enter: 13,
+          ArrowLeft: 37,
+          ArrowUp: 38,
+          ArrowRight: 39,
+          ArrowDown: 40,
+          Delete: 46,
+        };
+
+        if (nav[e.key]) {
+          sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1]));
+          return;
+        }
+
+        // Plain characters
+        if (e.key.length === 1) {
+          sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0]));
         }
       });
 
