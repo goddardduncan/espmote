@@ -292,6 +292,8 @@ let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2
 let lastMoveTime = performance.now();
 let smoothX = 0;
 let smoothY = 0;
+let scrollRemainder = 0;
+
 
 const TRACKPAD = {
   smoothing: 0.65,
@@ -302,7 +304,6 @@ const TRACKPAD = {
 
 const SCROLL = {
   scale: 0.02,     // overall speed (main tuning knob)
-  minStep: 0.05,     // threshold to emit scroll
   maxSteps: 6       // safety clamp
 };
 
@@ -542,13 +543,18 @@ document.addEventListener("wheel", (e) => {
   if (e.deltaMode === 1) delta *= 16;
   if (e.deltaMode === 2) delta *= 100;
 
-  // Convert delta to scroll steps
-  let steps = Math.round(Math.abs(delta) * SCROLL.scale);
+  // Accumulate fractional scroll
+  scrollRemainder += Math.abs(delta) * SCROLL.scale;
 
-  // Deadzone
-  if (steps < SCROLL.minStep) return;
+  // Extract whole steps
+  let steps = Math.floor(scrollRemainder);
 
-  // Clamp
+  if (steps === 0) return;
+
+  // Remove emitted steps from remainder
+  scrollRemainder -= steps;
+
+  // Clamp burst size
   steps = Math.min(steps, SCROLL.maxSteps);
 
   const direction = delta > 0 ? -1 : 1;
@@ -557,6 +563,7 @@ document.addEventListener("wheel", (e) => {
     sendEncrypted(mouseChar, new Int8Array([115, direction]));
   }
 }, { passive: false });
+
 
 
 // --- KEYBOARD ---
