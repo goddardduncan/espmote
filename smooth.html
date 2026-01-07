@@ -292,7 +292,7 @@ let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2
 let lastMoveTime = performance.now();
 let smoothX = 0;
 let smoothY = 0;
-let scrollVelocity = 0;
+let scrollCarry = 0;
 let scrollLastTime = performance.now();
 
 const TRACKPAD = {
@@ -303,9 +303,9 @@ const TRACKPAD = {
 };
 
 const SCROLL = {
-  sensitivity: 0.015,   // lower = slower scroll
-  decay: 0.88,          // closer to 1 = longer momentum
-  maxSpeed: 3           // safety clamp
+  sensitivity: 0.0025,   
+  decay: 0.92,         
+  maxCarry: 5        
 };
 
 function accelCurve(speed) {
@@ -538,13 +538,20 @@ document.addEventListener("wheel", (e) => {
   if (document.pointerLockElement !== card) return;
   e.preventDefault();
 
-  // Convert wheel delta to velocity
-  scrollVelocity += e.deltaY * SCROLL.sensitivity;
+  // Normalize delta across devices
+  let delta = e.deltaY;
 
-  // Clamp velocity
-  scrollVelocity = Math.max(
-    -SCROLL.maxSpeed,
-    Math.min(SCROLL.maxSpeed, scrollVelocity)
+  // Firefox / some devices report lines instead of pixels
+  if (e.deltaMode === 1) delta *= 16;
+  if (e.deltaMode === 2) delta *= 100;
+
+  // Accumulate fractional scroll distance
+  scrollCarry += delta * SCROLL.scale;
+
+  // Clamp to prevent runaway
+  scrollCarry = Math.max(
+    -SCROLL.maxCarry,
+    Math.min(SCROLL.maxCarry, scrollCarry)
   );
 }, { passive: false });
 
@@ -640,18 +647,22 @@ function scrollTick() {
   const dt = now - scrollLastTime;
   scrollLastTime = now;
 
-  if (Math.abs(scrollVelocity) > 0.01) {
-    const step = Math.round(scrollVelocity);
+  // Emit scroll steps only when a full step is earned
+  if (Math.abs(scrollCarry) >= 1) {
+    const step = scrollCarry > 0 ? 1 : -1;
 
-    if (step !== 0 && mouseChar) {
+    if (mouseChar) {
       sendEncrypted(mouseChar, new Int8Array([115, step > 0 ? -1 : 1]));
     }
 
-    // Apply decay (momentum fade)
-    scrollVelocity *= Math.pow(SCROLL.decay, dt / 16);
-  } else {
-    scrollVelocity = 0;
+    scrollCarry -= step;
   }
+
+  // Momentum decay
+  scrollCarry *= Math.pow(SCROLL.decay, dt / 16);
+
+  // Kill tiny noise
+  if (Math.abs(scrollCarry) < 0.001) scrollCarry = 0;
 
   requestAnimationFrame(scrollTick);
 }
