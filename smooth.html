@@ -292,10 +292,6 @@ let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2
 let lastMoveTime = performance.now();
 let smoothX = 0;
 let smoothY = 0;
-let scrollCarry = 0;
-let scrollLastTime = performance.now();
-let lastWheelTime = 0;
-
 
 const TRACKPAD = {
   smoothing: 0.65,
@@ -305,7 +301,7 @@ const TRACKPAD = {
 };
 
 const SCROLL = {
-  scale: 0.015,     // overall speed (main tuning knob)
+  scale: 0.02,     // overall speed (main tuning knob)
   minStep: 0.5,     // threshold to emit scroll
   maxSteps: 6       // safety clamp
 };
@@ -649,35 +645,6 @@ document.getElementById("updateBtn").onclick = async () => {
   await otaChar.writeValue(new Uint8Array([69]));
   document.getElementById("otaStatus").innerText = "Success! Rebooting...";
 };
-
-function scrollTick() {
-  const now = performance.now();
-  const dt = now - scrollLastTime;
-  scrollLastTime = now;
-
-  // Emit scroll steps only when a full step is earned
-  if (Math.abs(scrollCarry) >= 0.25) {
-    const step = scrollCarry > 0 ? 1 : -1;
-
-    if (mouseChar) {
-      sendEncrypted(mouseChar, new Int8Array([115, step > 0 ? -1 : 1]));
-    }
-
-    scrollCarry -= step;
-  }
-
-  // Momentum decay
-  if (performance.now() - lastWheelTime > 40) {
-  scrollCarry *= Math.pow(SCROLL.decay, dt / 16);
-  }
-
-  // Kill tiny noise
-  if (Math.abs(scrollCarry) < 0.001) scrollCarry = 0;
-
-  requestAnimationFrame(scrollTick);
-}
-
-scrollTick();
 
     </script>
   </body>
