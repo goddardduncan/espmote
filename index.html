@@ -706,9 +706,11 @@
           if (e.key === "`") {
             // ⌘ + ` → cycle windows (macOS)
             if (e.metaKey) {
-              // HID: key packet [107, keycode, mode]
-              // mode 4 = meta (⌘)
-              sendEncrypted(keyChar, new Uint8Array([107, 96, 4]));
+              // Use modifier-combo packet format
+              sendEncrypted(
+                keyChar,
+                new Uint8Array([107, 128, 4, 96]) // ⌘ + `
+              );
               return;
             }
 
