@@ -293,7 +293,7 @@ let lastMoveTime = performance.now();
 let smoothX = 0;
 let smoothY = 0;
 let scrollRemainder = 0;
-
+let lastScrollTime = 0;
 
 const TRACKPAD = {
   smoothing: 0.65,
@@ -305,6 +305,11 @@ const TRACKPAD = {
 const SCROLL = {
   scale: 0.02,     // overall speed (main tuning knob)
   maxSteps: 6       // safety clamp
+};
+
+const SCROLL_DECAY = {
+  rate: 0.85,      // closer to 1 = slower decay
+  idleMs: 40       // wait this long after last wheel input
 };
 
 function accelCurve(speed) {
@@ -537,6 +542,8 @@ document.addEventListener("wheel", (e) => {
   if (document.pointerLockElement !== card) return;
   e.preventDefault();
 
+  lastScrollTime = performance.now();
+
   let delta = e.deltaY;
 
   // Normalize wheel units
@@ -652,6 +659,24 @@ document.getElementById("updateBtn").onclick = async () => {
   await otaChar.writeValue(new Uint8Array([69]));
   document.getElementById("otaStatus").innerText = "Success! Rebooting...";
 };
+
+function decayScrollRemainder() {
+  const now = performance.now();
+
+  // Only decay when fingers are off the trackpad
+  if (now - lastScrollTime > SCROLL_DECAY.idleMs) {
+    scrollRemainder *= SCROLL_DECAY.rate;
+
+    // Kill tiny noise
+    if (scrollRemainder < 0.001) {
+      scrollRemainder = 0;
+    }
+  }
+
+  requestAnimationFrame(decayScrollRemainder);
+}
+
+decayScrollRemainder();
 
     </script>
   </body>
