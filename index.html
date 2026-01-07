@@ -694,120 +694,71 @@
         { passive: false }
       );
 
-      // --- KEYBOARD ---
-
-      let tickCount = 0,
-        tickTime;
+// --- FINAL STABLE KEYBOARD LOGIC ---
+      let tickCount = 0, tickTime;
 
       document.addEventListener("keydown", (e) => {
         if (document.pointerLockElement !== card || !keyChar) return;
 
-        // 🔴 browser-safe remaps FIRST
+        // 1. Calculate Bitmask (Only used for Mode 0 and 1)
+        let mod = 0;
+        if (e.shiftKey) mod |= 1;
+        if (e.ctrlKey)  mod |= 2;
+        if (e.altKey)   mod |= 4;
+        if (e.metaKey)  mod |= 8;
 
-        // Ctrl + ` → Cmd + `
+        // 2. BROWSER REMAPS (Ctrl -> Cmd)
         if (e.ctrlKey && e.key === "`") {
-          e.preventDefault();
-          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
+          e.preventDefault(); 
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); // Mode 4, Key 96
           return;
         }
-
-        // Ctrl + Tab → Cmd + Tab
         if (e.ctrlKey && e.key === "Tab") {
           e.preventDefault();
-          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+          sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));  // Mode 4, Key 9
           return;
         }
 
-        e.preventDefault();
-
-        // --- backtick logic (no Cmd paths) ---
+        // 3. ESC LOGIC (``` -> ESC)
         if (e.key === "`") {
+          e.preventDefault();
           tickCount++;
           clearTimeout(tickTime);
-
           if (tickCount === 3) {
-            sendEncrypted(keyChar, new Uint8Array([107, 27, 1])); // ESC
+            sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0])); 
             tickCount = 0;
           } else {
             tickTime = setTimeout(() => {
-              if (tickCount === 1) {
-                sendEncrypted(keyChar, new Uint8Array([107, 96, 0]));
-              }
+              if (tickCount === 1) sendEncrypted(keyChar, new Uint8Array([107, 96, 0, mod]));
               tickCount = 0;
             }, 500);
           }
           return;
         }
 
-        // Ctrl / Alt / Cmd + letter (Cmd here only comes from remaps)
+        e.preventDefault();
+
+        // 4. SHORTCUTS (Cmd+C, Cmd+V, Cmd+1)
+        // Note: We ignore the 'mod' bitmask here and use the dedicated Mode 3/4
         if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
           const mode = e.metaKey ? 4 : 3;
-          sendEncrypted(
-            keyChar,
-            new Uint8Array([107, 128, mode, e.key.toLowerCase().charCodeAt(0)])
-          );
+          const charCode = e.key.toLowerCase().charCodeAt(0);
+          sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
           return;
         }
 
-        // Navigation keys
-        const nav = {
-          Backspace: 8,
-          Tab: 9,
-          Enter: 13,
-          ArrowLeft: 37,
-          ArrowUp: 38,
-          ArrowRight: 39,
-          ArrowDown: 40,
-          Delete: 46,
-        };
-
+        // 5. NAVIGATION (Enter, Arrows, etc.)
+        const nav = { Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Delete: 46 };
         if (nav[e.key]) {
-          sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1]));
+          sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
           return;
         }
 
-        // Plain characters
+        // 6. PLAIN TYPING
         if (e.key.length === 1) {
-          sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0]));
+          sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
         }
       });
-
-      // --- FIRMWARE OTA ---
-
-      async function loadGitHubFiles() {
-        try {
-          const response = await fetch(REPO_API_URL);
-          const files = await response.json();
-          const list = document.getElementById("fileList");
-          list.innerHTML = "";
-          files
-            .filter((f) => f.name.endsWith(".bin"))
-            .forEach((file) => {
-              const div = document.createElement("div");
-              div.className = "file-item";
-              div.innerHTML = `<span>📦 ${file.name}</span>`;
-              div.onclick = async () => {
-                document.getElementById("otaStatus").innerText =
-                  "Downloading...";
-                const res = await fetch(file.download_url);
-                selectedFileArray = new Uint8Array(
-                  await (await res.blob()).arrayBuffer()
-                );
-                document.getElementById("otaStatus").innerText =
-                  "Ready: " + file.name;
-                document.getElementById("updateBtn").disabled = false;
-                Array.from(list.children).forEach((c) =>
-                  c.classList.remove("selected")
-                );
-                div.classList.add("selected");
-              };
-              list.appendChild(div);
-            });
-        } catch (e) {
-          document.getElementById("fileList").innerText =
-            "Error loading builds.";
-        }
-      }
 
       function toggleOTA() {
         const c = document.getElementById("ota-controls");
