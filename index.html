@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -264,7 +264,16 @@
       <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0">
       <span id="sensValue">2.0</span>
     </div>
-    
+    <div class="sensitivity-container">
+      <label>Scroll decay</label>
+      <input type="range" id="scrollDecay" min="0.90" max="0.99" step="0.005" value="0.95">
+      <span id="scrollDecayVal">0.95</span>
+    </div>
+    <div class="sensitivity-container">
+      <label>Scroll precision</label>
+      <input type="range" id="scrollBoost" min="1.0" max="2.5" step="0.1" value="1.4">
+      <span id="scrollBoostVal">1.4</span>
+    </div>   
     <div id="ota-panel">
       <span class="ota-toggle" onclick="toggleOTA()">Developer: Update Firmware</span>
       <div id="ota-controls">
@@ -289,6 +298,43 @@ const storeName = "KeyStore";
 let mouseChar, keyChar, otaChar, aesKeyParsed, selectedFileArray = null;
 let hasAttemptedConnection = false;
 let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
+let lastMoveTime = performance.now();
+let smoothX = 0;
+let smoothY = 0;
+let scrollRemainder = 0;
+let lastScrollTime = 0;
+
+const TRACKPAD = {
+  smoothing: 0.65,
+  deadzone: 0.15,
+  curveMid: 0.08,
+  curveSharpness: 10
+};
+
+let scrollDecay =
+  parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
+
+let scrollBoost =
+  parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+
+const SCROLL = {
+  scale: 0.02,
+  minStep: 0.05,
+  maxSteps: 6
+};
+
+function accelCurve(speed) {
+  return 1 + (1 / (1 + Math.exp(
+    -TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)
+  )));
+}
+
+function scrollCurve(delta) {
+  const abs = Math.abs(delta);
+  return abs < 10
+    ? abs * scrollBoost
+    : abs;
+}
 
 const UUIDS = {
   SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
@@ -301,6 +347,10 @@ const UUIDS = {
 
 const slider = document.getElementById("sensSlider");
 const sensDisplay = document.getElementById("sensValue");
+const decaySlider = document.getElementById("scrollDecay");
+const decayLabel  = document.getElementById("scrollDecayVal");
+const boostSlider = document.getElementById("scrollBoost");
+const boostLabel  = document.getElementById("scrollBoostVal");
 
 slider.oninput = (e) => {
   mouseSensitivity = parseFloat(e.target.value);
@@ -309,6 +359,26 @@ slider.oninput = (e) => {
   localStorage.setItem("mouseSensitivity", mouseSensitivity);
 };
 
+decaySlider.value = scrollDecay;
+decayLabel.textContent = scrollDecay.toFixed(3);
+
+boostSlider.value = scrollBoost;
+boostLabel.textContent = scrollBoost.toFixed(1);
+
+// decay slider
+decaySlider.oninput = (e) => {
+  scrollDecay = parseFloat(e.target.value);
+  decayLabel.textContent = scrollDecay.toFixed(3);
+  localStorage.setItem("scrollDecay", scrollDecay);
+};
+
+// boost slider
+boostSlider.oninput = (e) => {
+  scrollBoost = parseFloat(e.target.value);
+  boostLabel.textContent = scrollBoost.toFixed(1);
+  localStorage.setItem("scrollBoost", scrollBoost);
+};
+      
 function togglePassword() {
   const input = document.getElementById("aesKey");
   input.type = input.type === "password" ? "text" : "password";
@@ -464,10 +534,38 @@ document.addEventListener("pointerlockchange", () => {
 });
 
 document.addEventListener("mousemove", (e) => {
-  if (document.pointerLockElement === card) {
-    const scaledX = Math.round(e.movementX * mouseSensitivity);
-    const scaledY = Math.round(e.movementY * mouseSensitivity);
-    sendEncrypted(mouseChar, new Int8Array([109, scaledX, scaledY]));
+  if (document.pointerLockElement !== card) return;
+
+  const now = performance.now();
+  const dt = Math.max(now - lastMoveTime, 1);
+  lastMoveTime = now;
+
+  const rawX = e.movementX;
+  const rawY = e.movementY;
+
+  // Velocity (px/ms)
+  const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
+
+  // Temporal smoothing
+  smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
+  smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
+
+  // Deadzone
+  if (Math.abs(smoothX) < TRACKPAD.deadzone) smoothX = 0;
+  if (Math.abs(smoothY) < TRACKPAD.deadzone) smoothY = 0;
+
+  // Acceleration
+  const accel = accelCurve(speed);
+
+  let outX = Math.round(smoothX * accel * mouseSensitivity);
+  let outY = Math.round(smoothY * accel * mouseSensitivity);
+
+  // HID safety clamp
+  outX = Math.max(-127, Math.min(127, outX));
+  outY = Math.max(-127, Math.min(127, outY));
+
+  if (outX || outY) {
+    sendEncrypted(mouseChar, new Int8Array([109, outX, outY]));
   }
 });
 
@@ -482,8 +580,39 @@ document.addEventListener("mouseup", (e) => {
 });
 
 document.addEventListener("wheel", (e) => {
-  if (document.pointerLockElement === card)
-    sendEncrypted(mouseChar, new Int8Array([115, e.deltaY > 0 ? -1 : 1]));
+  if (document.pointerLockElement !== card) return;
+  e.preventDefault();
+
+  lastScrollTime = performance.now();
+
+  let delta = e.deltaY;
+
+  // Normalize wheel units
+  if (e.deltaMode === 1) delta *= 16;
+  if (e.deltaMode === 2) delta *= 100;
+
+  // Apply curve + scale
+  const curved = scrollCurve(delta) * SCROLL.scale;
+
+  // Accumulate
+  scrollRemainder += curved;
+
+  // Extract whole steps
+  let steps = Math.floor(Math.abs(scrollRemainder));
+
+  if (steps === 0) return;
+
+  // Clamp burst
+  steps = Math.min(steps, SCROLL.maxSteps);
+
+  const direction = delta > 0 ? -1 : 1;
+
+  // Remove emitted steps
+  scrollRemainder -= steps * Math.sign(scrollRemainder);
+
+  for (let i = 0; i < steps; i++) {
+    sendEncrypted(mouseChar, new Int8Array([115, direction]));
+  }
 }, { passive: false });
 
 // --- KEYBOARD ---
@@ -572,6 +701,25 @@ document.getElementById("updateBtn").onclick = async () => {
   await otaChar.writeValue(new Uint8Array([69]));
   document.getElementById("otaStatus").innerText = "Success! Rebooting...";
 };
+
+function decayScrollRemainder() {
+  const now = performance.now();
+
+  // Only decay when idle
+  if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
+    const dt = now - lastScrollTime;
+    scrollRemainder *= Math.pow(scrollDecay, dt / 16);
+
+    if (Math.abs(scrollRemainder) < 0.01) {
+      scrollRemainder = 0;
+    }
+  }
+
+  requestAnimationFrame(decayScrollRemainder);
+}
+
+decayScrollRemainder();
+
     </script>
   </body>
 </html>
