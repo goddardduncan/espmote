@@ -305,9 +305,9 @@ const TRACKPAD = {
 };
 
 const SCROLL = {
-  scale: 0.0025,   
-  decay: 0.92,         
-  maxCarry: 5        
+  scale: 0.015,     // overall speed (main tuning knob)
+  minStep: 0.5,     // threshold to emit scroll
+  maxSteps: 6       // safety clamp
 };
 
 function accelCurve(speed) {
@@ -540,19 +540,28 @@ document.addEventListener("wheel", (e) => {
   if (document.pointerLockElement !== card) return;
   e.preventDefault();
 
-  lastWheelTime = performance.now();
-
   let delta = e.deltaY;
+
+  // Normalize wheel units
   if (e.deltaMode === 1) delta *= 16;
   if (e.deltaMode === 2) delta *= 100;
 
-  scrollCarry += delta * SCROLL.scale;
+  // Convert delta to scroll steps
+  let steps = Math.round(Math.abs(delta) * SCROLL.scale);
 
-  scrollCarry = Math.max(
-    -SCROLL.maxCarry,
-    Math.min(SCROLL.maxCarry, scrollCarry)
-  );
+  // Deadzone
+  if (steps < SCROLL.minStep) return;
+
+  // Clamp
+  steps = Math.min(steps, SCROLL.maxSteps);
+
+  const direction = delta > 0 ? -1 : 1;
+
+  for (let i = 0; i < steps; i++) {
+    sendEncrypted(mouseChar, new Int8Array([115, direction]));
+  }
 }, { passive: false });
+
 
 // --- KEYBOARD ---
 
