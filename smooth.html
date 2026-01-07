@@ -318,6 +318,15 @@ function accelCurve(speed) {
   )));
 }
 
+function scrollCurve(delta) {
+  const abs = Math.abs(delta);
+
+  // Boost small movements, leave big ones mostly alone
+  // Tuned for trackpads
+  return abs < 10
+    ? abs * 1.8
+    : abs;
+}
 
 const UUIDS = {
   SERVICE: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
