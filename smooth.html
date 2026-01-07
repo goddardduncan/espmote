@@ -294,6 +294,8 @@ let smoothX = 0;
 let smoothY = 0;
 let scrollCarry = 0;
 let scrollLastTime = performance.now();
+let lastWheelTime = 0;
+
 
 const TRACKPAD = {
   smoothing: 0.65,
@@ -538,17 +540,14 @@ document.addEventListener("wheel", (e) => {
   if (document.pointerLockElement !== card) return;
   e.preventDefault();
 
-  // Normalize delta across devices
-  let delta = e.deltaY;
+  lastWheelTime = performance.now();
 
-  // Firefox / some devices report lines instead of pixels
+  let delta = e.deltaY;
   if (e.deltaMode === 1) delta *= 16;
   if (e.deltaMode === 2) delta *= 100;
 
-  // Accumulate fractional scroll distance
   scrollCarry += delta * SCROLL.scale;
 
-  // Clamp to prevent runaway
   scrollCarry = Math.max(
     -SCROLL.maxCarry,
     Math.min(SCROLL.maxCarry, scrollCarry)
@@ -659,7 +658,9 @@ function scrollTick() {
   }
 
   // Momentum decay
+  if (performance.now() - lastWheelTime > 40) {
   scrollCarry *= Math.pow(SCROLL.decay, dt / 16);
+  }
 
   // Kill tiny noise
   if (Math.abs(scrollCarry) < 0.001) scrollCarry = 0;
