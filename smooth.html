@@ -648,7 +648,7 @@ function scrollTick() {
   scrollLastTime = now;
 
   // Emit scroll steps only when a full step is earned
-  if (Math.abs(scrollCarry) >= 1) {
+  if (Math.abs(scrollCarry) >= 0.25) {
     const step = scrollCarry > 0 ? 1 : -1;
 
     if (mouseChar) {
