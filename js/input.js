@@ -31,7 +31,7 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize all line break styles (\r\n, \r) to \n (ASCII 10)
+        // Normalize all line breaks
         const normalizedText = rawText.replace(/\r\n|\r/g, '\n');
 
         const statusEl = document.getElementById("status");
@@ -41,26 +41,27 @@ async function burstClipboard() {
             let char = normalizedText[i];
             let charCode = char.charCodeAt(0);
             
-            console.log(`Processing - Char: ${char} | Code: ${charCode}`);
-
             statusEl.innerText = `🚀 Sending: ${i + 1}/${normalizedText.length}`;
 
-            // TRIGGER CHECK: Check by ASCII Code 10 (Line Feed)
             if (charCode === 10) {
-                console.log("!!! Newline Detected - Executing Shift+Enter Sequence !!!");
+                console.log("Newline Detected: Executing Robust Shift+Enter Hold");
                 
-                // 1. Send Shift Down (Modifier 1, No Key)
+                // 1. PRESS SHIFT
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
-                await new Promise(r => setTimeout(r, 20));
-                
-                // 2. Send Enter (Key 13, Modifier 1)
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
                 await new Promise(r => setTimeout(r, 30));
+                
+                // 2. PRESS ENTER (With Shift still active)
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
+                await new Promise(r => setTimeout(r, 40));
 
-                // 3. Send All Up (Modifier 0, No Key)
+                // 3. RELEASE ENTER (Keep Shift active for a moment)
+                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1]));
+                await new Promise(r => setTimeout(r, 20));
+
+                // 4. RELEASE SHIFT (Final clean state)
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
             } else {
-                // Standard Typing (Mode 0)
+                // Normal Typing
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
