@@ -31,9 +31,8 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize \r\n (Windows) or \r (Mac old) to just \n 
-        // Then we process only \n to avoid "double-spacing"
-        const text = rawText.replace(/\r\n|\r/g, '\n');
+        // Ensure we handle all types of line breaks correctly
+        const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
@@ -45,13 +44,13 @@ async function burstClipboard() {
 
             statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // Check specifically for the Line Feed (newline)
-            if (char === '\n') {
-                charCode = 13; // Set key to Enter/Carriage Return
-                mod = 1;       // Force SHIFT modifier
+            // DETECTION: Handle the newline character specifically
+            if (char === '\n' || charCode === 10 || charCode === 13) {
+                charCode = 13; // HID/ASCII Carriage Return
+                mod = 1;       // Force SHIFT (Bit 0)
             }
 
-            // Send encrypted packet: [107, key, mode, mod]
+            // Protocol: [107 (k), Key, Mode, Modifier]
             sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
             
             await new Promise(r => setTimeout(r, BURST_DELAY));
@@ -60,8 +59,8 @@ async function burstClipboard() {
         statusEl.innerText = "Paste Complete!";
         setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
     } catch (err) {
-        console.error("Clipboard error", err);
-        document.getElementById("status").innerText = "Clipboard Error";
+        console.error("Clipboard error:", err);
+        document.getElementById("status").innerText = "Clipboard Access Error";
     }
 }
 
