@@ -10,15 +10,16 @@ let tickCount = 0, tickTime;
 
 // Burst Paste State
 let lastVTime = 0;
-// Increased delay to 75ms to prevent buffer overflow/decryption lag
-const BURST_DELAY = 75; 
+const BURST_DELAY = 75; // 75ms ensures ESP32 decryption and OS HID processing stability
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
 const SCROLL = { scale: 0.02, minStep: 0.05, maxSteps: 6 };
 
-// Acceleration helpers
+// Acceleration helper for cursor movement
 const accelCurve = (speed) => 1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
+
+// Curve helper for scrolling
 const scrollCurve = (delta) => {
     const abs = Math.abs(delta);
     return abs < 10 ? abs * scrollBoost : abs;
@@ -35,13 +36,22 @@ async function burstClipboard() {
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
-            // Provide live feedback of the progress
+            let charCode = char.charCodeAt(0);
+            let mod = 0; 
+
             statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+
+            // SAFETY: If character is a Newline, send Shift(1) + Enter(13)
+            // This prevents "Enter" from submitting forms or sending messages mid-paste
+            if (charCode === 10 || charCode === 13) {
+                charCode = 13; 
+                mod = 1; 
+            }
+
+            // Protocol: [Identifier(107), KeyCode, Mode(0 for typing), Modifiers]
+            sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
             
-            // Mode 0: Plain typing using ASCII char code
-            sendEncrypted(keyChar, new Uint8Array([107, char.charCodeAt(0), 0, 0]));
-            
-            // Wait for hardware to process
+            // Wait for the hardware to process the encrypted packet
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
@@ -49,7 +59,7 @@ async function burstClipboard() {
         setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
     } catch (err) {
         console.error("Clipboard error", err);
-        document.getElementById("status").innerText = "Clipboard Access Denied";
+        document.getElementById("status").innerText = "Clipboard Error";
     }
 }
 
@@ -65,8 +75,8 @@ document.addEventListener("mousemove", (e) => {
     const rawX = e.movementX;
     const rawY = e.movementY;
 
+    // Velocity-based smoothing and acceleration
     const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
-
     smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
     smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
 
@@ -74,10 +84,10 @@ document.addEventListener("mousemove", (e) => {
     if (Math.abs(smoothY) < TRACKPAD.deadzone) smoothY = 0;
 
     const accel = accelCurve(speed);
-
     let outX = Math.round(smoothX * accel * mouseSensitivity);
     let outY = Math.round(smoothY * accel * mouseSensitivity);
 
+    // HID safety clamp
     outX = Math.max(-127, Math.min(127, outX));
     outY = Math.max(-127, Math.min(127, outY));
 
@@ -89,13 +99,13 @@ document.addEventListener("mousemove", (e) => {
 // --- MOUSE CLICKS & DRAGGING ---
 document.addEventListener("mousedown", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        // Sends '1' for Button Down
+        // Sends '1' for Button Down - starts a click or drag
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
 });
 
 document.addEventListener("mouseup", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        // Sends '0' for Button Up (Completes drag/click)
+        // Sends '0' for Button Up - finishes the click or drag
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 0]));
 });
 
@@ -107,6 +117,7 @@ document.addEventListener("wheel", (e) => {
     lastScrollTime = performance.now();
     let delta = e.deltaY;
 
+    // Normalize different browser wheel modes
     if (e.deltaMode === 1) delta *= 16;
     if (e.deltaMode === 2) delta *= 100;
 
@@ -130,7 +141,7 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // 1. BURST PASTE DETECTION (Ctrl + V + V)
+    // 1. BURST PASTE DETECTION (Double-tap V while holding Ctrl)
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         const now = performance.now();
         if (now - lastVTime < 500) {
@@ -142,26 +153,26 @@ document.addEventListener("keydown", (e) => {
         lastVTime = now;
     }
 
-    // 2. Modifiers
+    // 2. Modifiers bitmask
     let mod = 0;
     if (e.shiftKey) mod |= 1;
     if (e.ctrlKey) mod |= 2;
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
-    // 3. SPECIAL REMAPS
+    // 3. OS-LEVEL INTERRUPT REMAPS
     if (e.ctrlKey && e.key === "`") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); // Switch window
         return;
     }
     if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9])); // Tab switch
         return;
     }
 
-    // 4. ESC LOGIC (3x ` -> ESC)
+    // 4. ESCAPE LOGIC (3x ` -> ESC)
     if (e.key === "`") {
         e.preventDefault();
         tickCount++;
@@ -181,7 +192,7 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // 5. SHORTCUTS (Ctrl+C, etc)
+    // 5. SHORTCUTS (Ctrl/Cmd + Key)
     if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
         const mode = e.metaKey ? 4 : 3;
         const charCode = e.key.toLowerCase().charCodeAt(0);
@@ -189,7 +200,7 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 6. NAVIGATION
+    // 6. NAVIGATION & FUNCTION KEYS
     const nav = {
         Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38,
         ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
@@ -209,7 +220,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-// --- SCROLL DECAY ---
+// --- SCROLL DECAY ANIMATION ---
 function decayScrollRemainder() {
     const now = performance.now();
     if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
