@@ -31,31 +31,37 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize Line Endings
-        const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        // REGEX FIX: This replaces all variations of newlines (\r\n, \n, \r) 
+        // with a single unique placeholder so we can process them reliably.
+        const normalizedText = rawText.replace(/\r\n|\r|\n/g, '\n');
+
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
 
-        for (let i = 0; i < text.length; i++) {
-            let char = text[i];
+        for (let i = 0; i < normalizedText.length; i++) {
+            let char = normalizedText[i];
             let charCode = char.charCodeAt(0);
             
-            statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+            // Debug: Check your browser console to see exactly what is being sent
+            console.log(`Char: ${char} | Code: ${charCode}`);
 
+            statusEl.innerText = `🚀 Sending: ${i + 1}/${normalizedText.length}`;
+
+            // Check for Newline placeholder (ASCII 10)
             if (char === '\n') {
                 // EXPLICIT SHIFT+ENTER SEQUENCE
-                // 1. Shift Down
+                // 1. Send Shift Down (Mod 1, No Key)
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
-                await new Promise(r => setTimeout(r, 10));
+                await new Promise(r => setTimeout(r, 15));
                 
-                // 2. Press Enter (while holding Shift)
+                // 2. Send Enter (Key 13, Mod 1)
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
-                await new Promise(r => setTimeout(r, 20));
+                await new Promise(r => setTimeout(r, 25));
 
-                // 3. Release All
+                // 3. Send Release (Mod 0, No Key)
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
             } else {
-                // Normal Typing
+                // Standard Typing (Mode 0)
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
@@ -66,7 +72,7 @@ async function burstClipboard() {
         setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
     } catch (err) {
         console.error("Clipboard error:", err);
-        document.getElementById("status").innerText = "Clipboard Access Error";
+        document.getElementById("status").innerText = "Clipboard Error";
     }
 }
 
