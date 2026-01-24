@@ -31,37 +31,30 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize all line breaks
-        const normalizedText = rawText.replace(/\r\n|\r/g, '\n');
-
+        // Normalize all line breaks to \n
+        const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
 
-        for (let i = 0; i < normalizedText.length; i++) {
-            let char = normalizedText[i];
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
             let charCode = char.charCodeAt(0);
             
-            statusEl.innerText = `🚀 Sending: ${i + 1}/${normalizedText.length}`;
+            statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
             if (charCode === 10) {
-                console.log("Newline Detected: Executing Robust Shift+Enter Hold");
+                // NEWLINE LOGIC: Using Scan Code 40 (Enter) with Mode 1 (Special/Raw)
+                // This is the most reliable way to force a Shift+Enter combo
                 
-                // 1. PRESS SHIFT
-                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
-                await new Promise(r => setTimeout(r, 30));
-                
-                // 2. PRESS ENTER (With Shift still active)
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
+                // 1. Send Shift + Enter Press (Scan code 40, Mode 1, Mod 1)
+                sendEncrypted(keyChar, new Uint8Array([107, 40, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
-
-                // 3. RELEASE ENTER (Keep Shift active for a moment)
-                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1]));
-                await new Promise(r => setTimeout(r, 20));
-
-                // 4. RELEASE SHIFT (Final clean state)
+                
+                // 2. Explicit Release to ensure the OS "lifts" the key
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
+                await new Promise(r => setTimeout(r, 20));
             } else {
-                // Normal Typing
+                // Normal Typing (ASCII charCode, Mode 0, Mod 0)
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
