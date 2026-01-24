@@ -31,27 +31,33 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Clean up line endings
+        // Normalize Line Endings
         const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
             let charCode = char.charCodeAt(0);
-            let mod = 0; 
-
+            
             statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // Try the Shift + Enter combo again, but ensure charCode is strictly 13
             if (char === '\n') {
-                charCode = 13; 
-                mod = 1; // Shift bit
-            }
+                // EXPLICIT SHIFT+ENTER SEQUENCE
+                // 1. Shift Down
+                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
+                await new Promise(r => setTimeout(r, 10));
+                
+                // 2. Press Enter (while holding Shift)
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
+                await new Promise(r => setTimeout(r, 20));
 
-            // Protocol: [107 (k), Key, Mode, Modifier]
-            sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
+                // 3. Release All
+                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
+            } else {
+                // Normal Typing
+                sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
+            }
             
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
