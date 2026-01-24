@@ -10,7 +10,7 @@ let tickCount = 0, tickTime;
 
 // Burst Paste State
 let lastVTime = 0;
-const BURST_DELAY = 75; // 75ms ensures ESP32 decryption and OS HID processing stability
+const BURST_DELAY = 75; // 75ms for ESP32 and HID stability
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -31,41 +31,40 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize all line breaks to \n
         const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
-        const originalStatus = statusEl.innerText;
+        const originalStatus = statusEl ? statusEl.innerText : "Connected";
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
             let charCode = char.charCodeAt(0);
             
-            statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+            if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
             if (charCode === 10) {
-                // NEWLINE LOGIC: Using Scan Code 40 (Enter) with Mode 1 (Special/Raw)
-                // This is the most reliable way to force a Shift+Enter combo
-                
-                // 1. Send Shift + Enter Press (Scan code 40, Mode 1, Mod 1)
-                sendEncrypted(keyChar, new Uint8Array([107, 40, 1, 1]));
+                // FIXED NEWLINE: Use ASCII 13, Mode 1 (Special), Mod 1 (Shift)
+                // This triggers the 'case 13' in your Arduino for KEY_RETURN
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
                 
-                // 2. Explicit Release to ensure the OS "lifts" the key
+                // Explicit Release
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
             } else {
-                // Normal Typing (ASCII charCode, Mode 0, Mod 0)
+                // Normal Typing (ASCII, Mode 0, Mod 0)
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
-        statusEl.innerText = "Paste Complete!";
-        setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
+        if (statusEl) {
+            statusEl.innerText = "Paste Complete!";
+            setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
+        }
     } catch (err) {
         console.error("Clipboard error:", err);
-        document.getElementById("status").innerText = "Clipboard Error";
+        if (statusEl) statusEl.innerText = "Clipboard Error";
     }
 }
 
@@ -81,7 +80,6 @@ document.addEventListener("mousemove", (e) => {
     const rawX = e.movementX;
     const rawY = e.movementY;
 
-    // Velocity-based smoothing and acceleration
     const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
     smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
     smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
@@ -93,7 +91,6 @@ document.addEventListener("mousemove", (e) => {
     let outX = Math.round(smoothX * accel * mouseSensitivity);
     let outY = Math.round(smoothY * accel * mouseSensitivity);
 
-    // HID safety clamp
     outX = Math.max(-127, Math.min(127, outX));
     outY = Math.max(-127, Math.min(127, outY));
 
@@ -105,13 +102,11 @@ document.addEventListener("mousemove", (e) => {
 // --- MOUSE CLICKS & DRAGGING ---
 document.addEventListener("mousedown", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        // Sends '1' for Button Down - starts a click or drag
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
 });
 
 document.addEventListener("mouseup", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        // Sends '0' for Button Up - finishes the click or drag
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 0]));
 });
 
@@ -123,7 +118,6 @@ document.addEventListener("wheel", (e) => {
     lastScrollTime = performance.now();
     let delta = e.deltaY;
 
-    // Normalize different browser wheel modes
     if (e.deltaMode === 1) delta *= 16;
     if (e.deltaMode === 2) delta *= 100;
 
@@ -169,12 +163,12 @@ document.addEventListener("keydown", (e) => {
     // 3. OS-LEVEL INTERRUPT REMAPS
     if (e.ctrlKey && e.key === "`") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); // Switch window
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); 
         return;
     }
     if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9])); // Tab switch
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9])); 
         return;
     }
 
@@ -198,7 +192,7 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // 5. SHORTCUTS (Ctrl/Cmd + Key)
+    // 5. SHORTCUTS (Ctrl/Cmd + Key) -> Arduino Mode 3 (Ctrl) or 4 (Meta)
     if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
         const mode = e.metaKey ? 4 : 3;
         const charCode = e.key.toLowerCase().charCodeAt(0);
@@ -206,9 +200,9 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 6. NAVIGATION & FUNCTION KEYS
+    // 6. NAVIGATION & FUNCTION KEYS (Mode 1)
     const nav = {
-        Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38,
+        Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38,
         ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
         Home: 36, End: 35, PageUp: 33, PageDown: 34,
         F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
