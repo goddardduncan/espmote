@@ -28,8 +28,12 @@ const scrollCurve = (delta) => {
 // --- BURST PASTE (Ctrl + V + V) ---
 async function burstClipboard() {
     try {
-        const text = await navigator.clipboard.readText();
-        if (!text) return;
+        const rawText = await navigator.clipboard.readText();
+        if (!rawText) return;
+
+        // Normalize \r\n (Windows) or \r (Mac old) to just \n 
+        // Then we process only \n to avoid "double-spacing"
+        const text = rawText.replace(/\r\n|\r/g, '\n');
 
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
@@ -41,17 +45,15 @@ async function burstClipboard() {
 
             statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // SAFETY: If character is a Newline, send Shift(1) + Enter(13)
-            // This prevents "Enter" from submitting forms or sending messages mid-paste
-            if (charCode === 10 || charCode === 13) {
-                charCode = 13; 
-                mod = 1; 
+            // Check specifically for the Line Feed (newline)
+            if (char === '\n') {
+                charCode = 13; // Set key to Enter/Carriage Return
+                mod = 1;       // Force SHIFT modifier
             }
 
-            // Protocol: [Identifier(107), KeyCode, Mode(0 for typing), Modifiers]
+            // Send encrypted packet: [107, key, mode, mod]
             sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
             
-            // Wait for the hardware to process the encrypted packet
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
