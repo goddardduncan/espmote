@@ -31,7 +31,7 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Ensure we handle all types of line breaks correctly
+        // Clean up line endings
         const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
         const statusEl = document.getElementById("status");
@@ -44,10 +44,10 @@ async function burstClipboard() {
 
             statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // DETECTION: Handle the newline character specifically
-            if (char === '\n' || charCode === 10 || charCode === 13) {
-                charCode = 13; // HID/ASCII Carriage Return
-                mod = 1;       // Force SHIFT (Bit 0)
+            // Try the Shift + Enter combo again, but ensure charCode is strictly 13
+            if (char === '\n') {
+                charCode = 13; 
+                mod = 1; // Shift bit
             }
 
             // Protocol: [107 (k), Key, Mode, Modifier]
