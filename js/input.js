@@ -31,9 +31,8 @@ async function burstClipboard() {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // REGEX FIX: This replaces all variations of newlines (\r\n, \n, \r) 
-        // with a single unique placeholder so we can process them reliably.
-        const normalizedText = rawText.replace(/\r\n|\r|\n/g, '\n');
+        // Normalize all line break styles (\r\n, \r) to \n (ASCII 10)
+        const normalizedText = rawText.replace(/\r\n|\r/g, '\n');
 
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
@@ -42,23 +41,23 @@ async function burstClipboard() {
             let char = normalizedText[i];
             let charCode = char.charCodeAt(0);
             
-            // Debug: Check your browser console to see exactly what is being sent
-            console.log(`Char: ${char} | Code: ${charCode}`);
+            console.log(`Processing - Char: ${char} | Code: ${charCode}`);
 
             statusEl.innerText = `🚀 Sending: ${i + 1}/${normalizedText.length}`;
 
-            // Check for Newline placeholder (ASCII 10)
-            if (char === '\n') {
-                // EXPLICIT SHIFT+ENTER SEQUENCE
-                // 1. Send Shift Down (Mod 1, No Key)
-                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
-                await new Promise(r => setTimeout(r, 15));
+            // TRIGGER CHECK: Check by ASCII Code 10 (Line Feed)
+            if (charCode === 10) {
+                console.log("!!! Newline Detected - Executing Shift+Enter Sequence !!!");
                 
-                // 2. Send Enter (Key 13, Mod 1)
+                // 1. Send Shift Down (Modifier 1, No Key)
+                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 1])); 
+                await new Promise(r => setTimeout(r, 20));
+                
+                // 2. Send Enter (Key 13, Modifier 1)
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 1]));
-                await new Promise(r => setTimeout(r, 25));
+                await new Promise(r => setTimeout(r, 30));
 
-                // 3. Send Release (Mod 0, No Key)
+                // 3. Send All Up (Modifier 0, No Key)
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
             } else {
                 // Standard Typing (Mode 0)
