@@ -8,9 +8,10 @@ let smoothX = 0, smoothY = 0;
 let scrollRemainder = 0, lastScrollTime = 0;
 let tickCount = 0, tickTime;
 
-// New variables for Burst Paste
+// Burst Paste State
 let lastVTime = 0;
-const BURST_DELAY = 20; // ms between characters to prevent BLE congestion
+// Increased delay to 75ms to prevent buffer overflow/decryption lag
+const BURST_DELAY = 75; 
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -23,7 +24,7 @@ const scrollCurve = (delta) => {
     return abs < 10 ? abs * scrollBoost : abs;
 };
 
-// --- BURST PASTE LOGIC ---
+// --- BURST PASTE (Ctrl + V + V) ---
 async function burstClipboard() {
     try {
         const text = await navigator.clipboard.readText();
@@ -31,20 +32,24 @@ async function burstClipboard() {
 
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl.innerText;
-        statusEl.innerText = "🚀 Bursting Clipboard...";
 
-        for (let char of text) {
-            // Sends as Mode 0 (Plain Typing) using the character's ASCII code
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            // Provide live feedback of the progress
+            statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+            
+            // Mode 0: Plain typing using ASCII char code
             sendEncrypted(keyChar, new Uint8Array([107, char.charCodeAt(0), 0, 0]));
-            // Vital delay to allow the ESP32 to decrypt and process each HID report
+            
+            // Wait for hardware to process
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
-        statusEl.innerText = originalStatus;
+        statusEl.innerText = "Paste Complete!";
+        setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
     } catch (err) {
-        console.error("Clipboard access denied:", err);
-        const statusEl = document.getElementById("status");
-        statusEl.innerText = "Error: Clipboard Denied";
+        console.error("Clipboard error", err);
+        document.getElementById("status").innerText = "Clipboard Access Denied";
     }
 }
 
@@ -81,14 +86,16 @@ document.addEventListener("mousemove", (e) => {
     }
 });
 
-// --- MOUSE CLICKS ---
+// --- MOUSE CLICKS & DRAGGING ---
 document.addEventListener("mousedown", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
+        // Sends '1' for Button Down
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
 });
 
 document.addEventListener("mouseup", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
+        // Sends '0' for Button Up (Completes drag/click)
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 0]));
 });
 
@@ -135,14 +142,14 @@ document.addEventListener("keydown", (e) => {
         lastVTime = now;
     }
 
-    // 2. Calculate Bitmask
+    // 2. Modifiers
     let mod = 0;
     if (e.shiftKey) mod |= 1;
     if (e.ctrlKey) mod |= 2;
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
-    // 3. BROWSER REMAPS
+    // 3. SPECIAL REMAPS
     if (e.ctrlKey && e.key === "`") {
         e.preventDefault();
         sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
@@ -174,7 +181,7 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // 5. SHORTCUTS (Handled if NOT a double-V burst)
+    // 5. SHORTCUTS (Ctrl+C, etc)
     if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
         const mode = e.metaKey ? 4 : 3;
         const charCode = e.key.toLowerCase().charCodeAt(0);
@@ -182,7 +189,7 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 6. NAVIGATION & FUNCTION KEYS
+    // 6. NAVIGATION
     const nav = {
         Backspace: 8, Tab: 9, Enter: 13, ArrowLeft: 37, ArrowUp: 38,
         ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
@@ -202,7 +209,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-// --- SCROLL DECAY ANIMATION ---
+// --- SCROLL DECAY ---
 function decayScrollRemainder() {
     const now = performance.now();
     if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
