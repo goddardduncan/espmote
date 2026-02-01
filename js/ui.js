@@ -29,7 +29,10 @@ function initUIListeners() {
 
         try {
             const device = await navigator.bluetooth.requestDevice({
-                filters: [{ namePrefix: "XIAO-" }],
+                filters: [
+                    { namePrefix: "XIAO-" },
+                    { namePrefix: "nimble" } 
+                ],
                 optionalServices: [UUIDS.SERVICE],
             });
 
