@@ -29,8 +29,8 @@ function initUIListeners() {
 
         try {
             const device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [UUIDS.SERVICE] 
+                filters: [{ namePrefix: "XIAO-" }],
+                optionalServices: [UUIDS.SERVICE],
             });
 
             document.getElementById("status").innerText = "Connecting...";
