@@ -10,6 +10,7 @@ let tickCount = 0, tickTime;
 
 // Burst Paste State
 let lastVTime = 0;
+let pendingPasteTimeout = null;
 const BURST_DELAY = 75; // 75ms for ESP32 and HID stability
 
 // Constants for behavior
@@ -33,7 +34,10 @@ async function burstClipboard() {
 
         const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
-        const originalStatus = statusEl ? statusEl.innerText : "Connected";
+        
+        // --- Explicitly release ALL keys to ensure clean slate ---
+        sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])); 
+        await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
@@ -42,16 +46,13 @@ async function burstClipboard() {
             if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
             if (charCode === 10) {
-                // FIXED NEWLINE: Use ASCII 13, Mode 1 (Special), Mod 1 (Shift)
-                // This triggers the 'case 13' in your Arduino for KEY_RETURN
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
+                // Return
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 0])); 
                 await new Promise(r => setTimeout(r, 40));
-                
-                // Explicit Release
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
             } else {
-                // Normal Typing (ASCII, Mode 0, Mod 0)
+                // Normal Typing
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
@@ -141,16 +142,27 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // 1. BURST PASTE DETECTION (Double-tap V while holding Ctrl)
+    // 1. BURST PASTE DETECTION
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault(); // IGNORE DEFAULT PASTE
+        e.stopPropagation();
+
         const now = performance.now();
-        if (now - lastVTime < 500) {
-            e.preventDefault();
+        if (now - lastVTime < 300) {
+            // Second V pressed fast -> Burst
+            clearTimeout(pendingPasteTimeout);
             lastVTime = 0; 
             burstClipboard();
-            return;
+        } else {
+            // First V pressed -> Wait to see if it's a double tap
+            lastVTime = now;
+            pendingPasteTimeout = setTimeout(() => {
+                // If no second V, send a single Ctrl+V command
+                sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
+                setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
+            }, 300);
         }
-        lastVTime = now;
+        return;
     }
 
     // 2. Modifiers bitmask
