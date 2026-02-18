@@ -1,23 +1,35 @@
-const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
-let hasAttemptedConnection = false;
-let selectedFileArray = null;
-let aesKeyParsed = null; // Defined variable to prevent errors
+// js/ui.js
 
 // Load saved values on page startup
 let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
 let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
 let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+let aesKeyParsed = null;
 
 window.onload = async () => {
+    console.log("UI Loading...");
+
     // 1. Set Slider UI to match loaded values
-    document.getElementById("sensSlider").value = mouseSensitivity;
-    document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+    const sensSlider = document.getElementById("sensSlider");
+    const sensValue = document.getElementById("sensValue");
+    if (sensSlider && sensValue) {
+        sensSlider.value = mouseSensitivity;
+        sensValue.innerText = mouseSensitivity.toFixed(1);
+    }
     
-    document.getElementById("scrollDecay").value = scrollDecay;
-    document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+    const decaySlider = document.getElementById("scrollDecay");
+    const decayValue = document.getElementById("scrollDecayVal");
+    if (decaySlider && decayValue) {
+        decaySlider.value = scrollDecay;
+        decayValue.innerText = scrollDecay.toFixed(3);
+    }
     
-    document.getElementById("scrollBoost").value = scrollBoost;
-    document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+    const boostSlider = document.getElementById("scrollBoost");
+    const boostValue = document.getElementById("scrollBoostVal");
+    if (boostSlider && boostValue) {
+        boostSlider.value = scrollBoost;
+        boostValue.innerText = scrollBoost.toFixed(1);
+    }
 
     // 2. Check for saved keys in IndexedDB
     const savedKey = await getKeyFromDB();
@@ -31,6 +43,7 @@ window.onload = async () => {
     
     // 3. Initialize all interactive UI elements
     initUIListeners();
+    console.log("UI Loaded.");
 };
 
 function initUIListeners() {
@@ -85,6 +98,7 @@ function initUIListeners() {
         mouseSensitivity = parseFloat(e.target.value);
         document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
         localStorage.setItem("mouseSensitivity", mouseSensitivity);
+        console.log("Sensitivity set to:", mouseSensitivity);
     };
 
     const d = document.getElementById("scrollDecay");
@@ -92,6 +106,7 @@ function initUIListeners() {
         scrollDecay = parseFloat(e.target.value);
         document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
         localStorage.setItem("scrollDecay", scrollDecay);
+        console.log("Decay set to:", scrollDecay);
     };
 
     const b = document.getElementById("scrollBoost");
@@ -99,6 +114,7 @@ function initUIListeners() {
         scrollBoost = parseFloat(e.target.value);
         document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
         localStorage.setItem("scrollBoost", scrollBoost);
+        console.log("Boost set to:", scrollBoost);
     };
 
     // --- Key Management ---
@@ -132,7 +148,7 @@ function initUIListeners() {
     // --- Trackpad Activation ---
     const card = document.getElementById("trackpad-card");
     card.onclick = function() {
-        if (mouseChar) this.requestPointerLock();
+        if (typeof mouseChar !== 'undefined' && mouseChar) this.requestPointerLock();
     };
 
     document.addEventListener("pointerlockchange", () => {
@@ -141,7 +157,9 @@ function initUIListeners() {
         document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
         // Show setup buttons only when trackpad is NOT active
-        const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
+        const keyWrapper = document.getElementById("keyWrapper");
+        const isKeySaved = keyWrapper.style.display === "none";
+        
         if (!locked && hasAttemptedConnection && !isKeySaved) {
             document.getElementById("changeKeyBtn").style.display = "inline-block";
             document.getElementById("confirmBtn").style.display = "inline-block";
@@ -157,14 +175,19 @@ function initUIListeners() {
         c.style.display = c.style.display === "flex" ? "none" : "flex";
     };
 
-    document.getElementById("resetBtn").onclick = resetApp;
+    document.getElementById("resetBtn").onclick = () => {
+        if(typeof resetApp === 'function') resetApp();
+    };
 }
 
 function updateActiveKey() {
     const val = document.getElementById("aesKey").value;
     if (val.length !== 16) return false;
-    aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
-    return true;
+    if (typeof CryptoJS !== 'undefined') {
+        aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
+        return true;
+    }
+    return false;
 }
 
 // --- GitHub Firmware Loader ---
@@ -202,7 +225,7 @@ async function loadGitHubFiles() {
 
 // --- OTA Update Trigger ---
 document.getElementById("updateBtn").onclick = async () => {
-    if (!selectedFileArray || !otaChar) return;
+    if (!selectedFileArray || typeof otaChar === 'undefined' || !otaChar) return;
     
     const pBar = document.getElementById("pBar");
     const pFill = document.getElementById("pFill");
