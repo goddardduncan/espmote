@@ -6,38 +6,33 @@ let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
 let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
 let aesKeyParsed = null;
 
+// --- Helper function to ensure DOM elements exist ---
+function getElement(id) {
+    const el = document.getElementById(id);
+    if (!el) console.error(`Element not found: ${id}`);
+    return el;
+}
+
 window.onload = async () => {
     console.log("UI Loading...");
 
     // 1. Set Slider UI to match loaded values
-    const sensSlider = document.getElementById("sensSlider");
-    const sensValue = document.getElementById("sensValue");
-    if (sensSlider && sensValue) {
-        sensSlider.value = mouseSensitivity;
-        sensValue.innerText = mouseSensitivity.toFixed(1);
-    }
+    getElement("sensSlider").value = mouseSensitivity;
+    getElement("sensValue").innerText = mouseSensitivity.toFixed(1);
     
-    const decaySlider = document.getElementById("scrollDecay");
-    const decayValue = document.getElementById("scrollDecayVal");
-    if (decaySlider && decayValue) {
-        decaySlider.value = scrollDecay;
-        decayValue.innerText = scrollDecay.toFixed(3);
-    }
+    getElement("scrollDecay").value = scrollDecay;
+    getElement("scrollDecayVal").innerText = scrollDecay.toFixed(3);
     
-    const boostSlider = document.getElementById("scrollBoost");
-    const boostValue = document.getElementById("scrollBoostVal");
-    if (boostSlider && boostValue) {
-        boostSlider.value = scrollBoost;
-        boostValue.innerText = scrollBoost.toFixed(1);
-    }
+    getElement("scrollBoost").value = scrollBoost;
+    getElement("scrollBoostVal").innerText = scrollBoost.toFixed(1);
 
     // 2. Check for saved keys in IndexedDB
     const savedKey = await getKeyFromDB();
     if (savedKey) {
-        document.getElementById("aesKey").value = savedKey;
-        document.getElementById("keyWrapper").style.display = "none";
-        document.getElementById("confirmBtn").style.display = "none";
-        document.getElementById("changeKeyBtn").style.display = "none";
+        getElement("aesKey").value = savedKey;
+        getElement("keyWrapper").style.display = "none";
+        getElement("confirmBtn").style.display = "none";
+        getElement("changeKeyBtn").style.display = "none";
         updateActiveKey();
     }
     
@@ -48,13 +43,13 @@ window.onload = async () => {
 
 function initUIListeners() {
     // --- Bluetooth Connection ---
-    document.getElementById("connectBtn").onclick = async () => {
+    getElement("connectBtn").onclick = async () => {
         if (!updateActiveKey()) {
             alert("Please enter a valid 16-character AES key first.");
             return;
         }
 
-        document.getElementById("status").innerText = "Requesting device...";
+        getElement("status").innerText = "Requesting device...";
 
         try {
             const device = await navigator.bluetooth.requestDevice({
@@ -65,7 +60,7 @@ function initUIListeners() {
                 optionalServices: [UUIDS.SERVICE],
             });
 
-            document.getElementById("status").innerText = "Connecting...";
+            getElement("status").innerText = "Connecting...";
             const server = await device.gatt.connect();
             const service = await server.getPrimaryService(UUIDS.SERVICE);
             
@@ -74,71 +69,77 @@ function initUIListeners() {
             keyChar = await service.getCharacteristic(UUIDS.KEY);
             otaChar = await service.getCharacteristic(UUIDS.OTA);
 
-            document.getElementById("status").innerText = "Connected";
-            document.getElementById("connectBtn").style.display = "none";
-            document.getElementById("ota-panel").style.display = "block";
+            getElement("status").innerText = "Connected";
+            getElement("connectBtn").style.display = "none";
+            getElement("ota-panel").style.display = "block";
             
             hasAttemptedConnection = true;
             loadGitHubFiles();
 
             device.addEventListener("gattserverdisconnected", () => {
-                document.getElementById("status").innerText = "Disconnected. Reloading...";
+                getElement("status").innerText = "Disconnected. Reloading...";
                 setTimeout(() => location.reload(), 1500);
             });
 
         } catch (e) {
             console.error(e);
-            document.getElementById("status").innerText = "Error: " + e.message;
+            getElement("status").innerText = "Error: " + e.message;
         }
     };
 
     // --- Sliders (Mouse & Scroll) ---
-    const s = document.getElementById("sensSlider");
-    s.oninput = (e) => {
-        mouseSensitivity = parseFloat(e.target.value);
-        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
-        localStorage.setItem("mouseSensitivity", mouseSensitivity);
-        console.log("Sensitivity set to:", mouseSensitivity);
-    };
+    const s = getElement("sensSlider");
+    if (s) {
+        s.addEventListener("input", (e) => {
+            mouseSensitivity = parseFloat(e.target.value);
+            getElement("sensValue").innerText = mouseSensitivity.toFixed(1);
+            localStorage.setItem("mouseSensitivity", mouseSensitivity);
+            console.log("Sensitivity:", mouseSensitivity);
+        });
+    }
 
-    const d = document.getElementById("scrollDecay");
-    d.oninput = (e) => {
-        scrollDecay = parseFloat(e.target.value);
-        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
-        localStorage.setItem("scrollDecay", scrollDecay);
-        console.log("Decay set to:", scrollDecay);
-    };
+    const d = getElement("scrollDecay");
+    if (d) {
+        d.addEventListener("input", (e) => {
+            scrollDecay = parseFloat(e.target.value);
+            getElement("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+            localStorage.setItem("scrollDecay", scrollDecay);
+            console.log("Decay:", scrollDecay);
+        });
+    }
 
-    const b = document.getElementById("scrollBoost");
-    b.oninput = (e) => {
-        scrollBoost = parseFloat(e.target.value);
-        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
-        localStorage.setItem("scrollBoost", scrollBoost);
-        console.log("Boost set to:", scrollBoost);
-    };
+    const b = getElement("scrollBoost");
+    if (b) {
+        b.addEventListener("input", (e) => {
+            scrollBoost = parseFloat(e.target.value);
+            getElement("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+            localStorage.setItem("scrollBoost", scrollBoost);
+            console.log("Boost:", scrollBoost);
+        });
+    }
 
     // --- Key Management ---
-    document.getElementById("togglePass").onclick = () => {
-        const input = document.getElementById("aesKey");
+    getElement("togglePass").onclick = () => {
+        const input = getElement("aesKey");
         input.type = input.type === "password" ? "text" : "password";
     };
 
-    document.getElementById("confirmBtn").onclick = async () => {
-        const val = document.getElementById("aesKey").value;
+    getElement("confirmBtn").onclick = async () => {
+        const val = getElement("aesKey").value;
         if (val.length === 16) {
             await saveKeyToDB(val);
-            document.getElementById("keyWrapper").style.display = "none";
-            document.getElementById("confirmBtn").style.display = "none";
-            document.getElementById("changeKeyBtn").style.display = "none";
+            getElement("keyWrapper").style.display = "none";
+            getElement("confirmBtn").style.display = "none";
+            getElement("changeKeyBtn").style.display = "none";
             alert("Key saved to secure storage.");
         } else {
             alert("Key must be exactly 16 characters.");
         }
     };
 
-    document.getElementById("changeKeyBtn").onclick = () => {
+    getElement("changeKeyBtn").onclick = () => {
         if (updateActiveKey()) {
-            const btn = document.getElementById("changeKeyBtn");
+            const btn = getElement("changeKeyBtn");
             const originalText = btn.innerText;
             btn.innerText = "Key Updated!";
             setTimeout(() => (btn.innerText = originalText), 1500);
@@ -146,7 +147,7 @@ function initUIListeners() {
     };
 
     // --- Trackpad Activation ---
-    const card = document.getElementById("trackpad-card");
+    const card = getElement("trackpad-card");
     card.onclick = function() {
         if (typeof mouseChar !== 'undefined' && mouseChar) this.requestPointerLock();
     };
@@ -154,34 +155,34 @@ function initUIListeners() {
     document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
-        document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
+        getElement("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
         // Show setup buttons only when trackpad is NOT active
-        const keyWrapper = document.getElementById("keyWrapper");
+        const keyWrapper = getElement("keyWrapper");
         const isKeySaved = keyWrapper.style.display === "none";
         
         if (!locked && hasAttemptedConnection && !isKeySaved) {
-            document.getElementById("changeKeyBtn").style.display = "inline-block";
-            document.getElementById("confirmBtn").style.display = "inline-block";
+            getElement("changeKeyBtn").style.display = "inline-block";
+            getElement("confirmBtn").style.display = "inline-block";
         } else {
-            document.getElementById("changeKeyBtn").style.display = "none";
-            document.getElementById("confirmBtn").style.display = "none";
+            getElement("changeKeyBtn").style.display = "none";
+            getElement("confirmBtn").style.display = "none";
         }
     });
 
     // --- OTA Firmware Panel ---
-    document.getElementById("otaToggle").onclick = () => {
-        const c = document.getElementById("ota-controls");
+    getElement("otaToggle").onclick = () => {
+        const c = getElement("ota-controls");
         c.style.display = c.style.display === "flex" ? "none" : "flex";
     };
 
-    document.getElementById("resetBtn").onclick = () => {
+    getElement("resetBtn").onclick = () => {
         if(typeof resetApp === 'function') resetApp();
     };
 }
 
 function updateActiveKey() {
-    const val = document.getElementById("aesKey").value;
+    const val = getElement("aesKey").value;
     if (val.length !== 16) return false;
     if (typeof CryptoJS !== 'undefined') {
         aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
@@ -195,7 +196,7 @@ async function loadGitHubFiles() {
     try {
         const res = await fetch(REPO_API_URL);
         const files = await res.json();
-        const list = document.getElementById("fileList");
+        const list = getElement("fileList");
         list.innerHTML = "";
         
         files.filter(f => f.name.endsWith(".bin")).forEach(file => {
@@ -204,14 +205,14 @@ async function loadGitHubFiles() {
             div.innerHTML = `<span>📦 ${file.name}</span>`;
             
             div.onclick = async () => {
-                document.getElementById("otaStatus").innerText = "Downloading...";
-                document.getElementById("updateBtn").disabled = true;
+                getElement("otaStatus").innerText = "Downloading...";
+                getElement("updateBtn").disabled = true;
                 
                 const fRes = await fetch(file.download_url);
                 selectedFileArray = new Uint8Array(await fRes.arrayBuffer());
                 
-                document.getElementById("otaStatus").innerText = `Ready: ${file.name}`;
-                document.getElementById("updateBtn").disabled = false;
+                getElement("otaStatus").innerText = `Ready: ${file.name}`;
+                getElement("updateBtn").disabled = false;
                 
                 Array.from(list.children).forEach(c => c.classList.remove("selected"));
                 div.classList.add("selected");
@@ -219,16 +220,16 @@ async function loadGitHubFiles() {
             list.appendChild(div);
         });
     } catch (e) { 
-        document.getElementById("fileList").innerText = "Error loading builds."; 
+        getElement("fileList").innerText = "Error loading builds."; 
     }
 }
 
 // --- OTA Update Trigger ---
-document.getElementById("updateBtn").onclick = async () => {
+getElement("updateBtn").onclick = async () => {
     if (!selectedFileArray || typeof otaChar === 'undefined' || !otaChar) return;
     
-    const pBar = document.getElementById("pBar");
-    const pFill = document.getElementById("pFill");
+    const pBar = getElement("pBar");
+    const pFill = getElement("pFill");
     pBar.style.display = "block";
     
     // Start Message: 'B' + Size (4 bytes)
@@ -248,10 +249,10 @@ document.getElementById("updateBtn").onclick = async () => {
         
         let pct = Math.round((i / selectedFileArray.length) * 100);
         pFill.style.width = pct + "%";
-        document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
+        getElement("otaStatus").innerText = `Updating: ${pct}%`;
     }
     
     // End Message: 'E'
     await otaChar.writeValue(new Uint8Array([69])); 
-    document.getElementById("otaStatus").innerText = "Success! Rebooting...";
+    getElement("otaStatus").innerText = "Success! Rebooting...";
 };
