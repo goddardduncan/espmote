@@ -36,45 +36,21 @@ async function burstClipboard() {
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl ? statusEl.innerText : "Connected";
 
-        // Mapping table for characters requiring SHIFT to be pressed
-        // Format: 'char': [ascii_code_of_base_key, modifier]
-        // Modifier: 1 = Shift
-        const specialChars = {
-            '!': [49, 1], '@': [50, 1], '#': [51, 1], '$': [52, 1], '%': [53, 1],
-            '^': [54, 1], '&': [55, 1], '*': [56, 1], '(': [57, 1], ')': [48, 1],
-            '_': [45, 1], '+': [61, 1], '{': [91, 1], '}': [93, 1], '|': [92, 1],
-            ':': [59, 1], '"': [39, 1], '<': [44, 1], '>': [46, 1], '?': [47, 1],
-            '~': [96, 1]
-        };
-
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
-            let modifier = 0;
-            let keyCode = char.charCodeAt(0);
-
-            // Determine if Shift is needed based on character
-            if (specialChars[char]) {
-                [keyCode, modifier] = specialChars[char];
-            } else if (char >= 'A' && char <= 'Z') {
-                // Handle uppercase letters
-                keyCode = char.toLowerCase().charCodeAt(0);
-                modifier = 1; // Shift
-            }
+            let charCode = char.charCodeAt(0);
 
             if (statusEl)
                 statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // --- Updated packet structure ---
-            // Packet: [Command, KeyCode, Modifier, Reserved]
-            if (char === '\n') {
-                // Enter
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 0]));
+            if (charCode === 10) {
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
+
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
             } else {
-                // Send ascii_code + modifier
-                sendEncrypted(keyChar, new Uint8Array([107, keyCode, modifier, 0]));
+                sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
 
             await new Promise(r => setTimeout(r, BURST_DELAY));
