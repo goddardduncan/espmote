@@ -152,10 +152,12 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         const now = performance.now();
         
-        // If second V pressed within 300ms -> Burst
-        if (now - lastVTime < 300) {
-            e.preventDefault(); // Stop default browser paste
-            e.stopPropagation();
+        // Immediate prevent default for all Ctrl+V scenarios to stop browser paste
+        e.preventDefault();
+        e.stopPropagation();
+
+        // If second V pressed within 500ms -> Burst
+        if (now - lastVTime < 500) {
             clearTimeout(pendingPasteTimeout);
             lastVTime = 0; 
             burstClipboard();
@@ -163,16 +165,12 @@ document.addEventListener("keydown", (e) => {
             // First V pressed -> Setup detection for second V
             lastVTime = now;
             
-            // Prevent default to stop browser from pasting into the app
-            e.preventDefault();
-            e.stopPropagation();
-
             pendingPasteTimeout = setTimeout(() => {
-                // No second V pressed within timeout -> Send single Ctrl+V to client
+                // No second V pressed within 500ms -> Send single Ctrl+V to client
                 sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
                 setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
                 lastVTime = 0;
-            }, 300);
+            }, 500);
         }
         return;
     }
