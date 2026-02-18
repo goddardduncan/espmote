@@ -9,23 +9,24 @@ let scrollRemainder = 0, lastScrollTime = 0;
 let tickCount = 0, tickTime;
 
 // Burst Paste State
-let lastVTime = 0;
-const BURST_DELAY = 75; // 75ms for ESP32 and HID stability
+let ctrlVState = null; // { time, timeout }
+const DOUBLE_TAP_DELAY = 500;
+const BURST_DELAY = 75; // HID stability
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
 const SCROLL = { scale: 0.02, minStep: 0.05, maxSteps: 6 };
 
-// Acceleration helper for cursor movement
-const accelCurve = (speed) => 1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
+// Acceleration helper
+const accelCurve = (speed) =>
+    1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
 
-// Curve helper for scrolling
 const scrollCurve = (delta) => {
     const abs = Math.abs(delta);
     return abs < 10 ? abs * scrollBoost : abs;
 };
 
-// --- BURST PASTE (Ctrl + V + V) ---
+// --- BURST PASTE ---
 async function burstClipboard() {
     try {
         const rawText = await navigator.clipboard.readText();
@@ -38,32 +39,32 @@ async function burstClipboard() {
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
             let charCode = char.charCodeAt(0);
-            
-            if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+
+            if (statusEl)
+                statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
             if (charCode === 10) {
-                // FIXED NEWLINE: Use ASCII 13, Mode 1 (Special), Mod 1 (Shift)
-                // This triggers the 'case 13' in your Arduino for KEY_RETURN
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
-                
-                // Explicit Release
+
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
             } else {
-                // Normal Typing (ASCII, Mode 0, Mod 0)
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
-            
+
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
         if (statusEl) {
             statusEl.innerText = "Paste Complete!";
-            setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
+            setTimeout(() => {
+                statusEl.innerText = originalStatus;
+            }, 2000);
         }
     } catch (err) {
         console.error("Clipboard error:", err);
+        const statusEl = document.getElementById("status");
         if (statusEl) statusEl.innerText = "Clipboard Error";
     }
 }
@@ -81,6 +82,7 @@ document.addEventListener("mousemove", (e) => {
     const rawY = e.movementY;
 
     const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
+
     smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
     smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
 
@@ -88,18 +90,18 @@ document.addEventListener("mousemove", (e) => {
     if (Math.abs(smoothY) < TRACKPAD.deadzone) smoothY = 0;
 
     const accel = accelCurve(speed);
+
     let outX = Math.round(smoothX * accel * mouseSensitivity);
     let outY = Math.round(smoothY * accel * mouseSensitivity);
 
     outX = Math.max(-127, Math.min(127, outX));
     outY = Math.max(-127, Math.min(127, outY));
 
-    if (outX || outY) {
+    if (outX || outY)
         sendEncrypted(mouseChar, new Int8Array([109, outX, outY]));
-    }
 });
 
-// --- MOUSE CLICKS & DRAGGING ---
+// --- MOUSE BUTTONS ---
 document.addEventListener("mousedown", (e) => {
     if (document.pointerLockElement === document.getElementById("trackpad-card"))
         sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
@@ -112,7 +114,9 @@ document.addEventListener("mouseup", (e) => {
 
 // --- SCROLLING ---
 document.addEventListener("wheel", (e) => {
-    if (document.pointerLockElement !== document.getElementById("trackpad-card")) return;
+    if (document.pointerLockElement !== document.getElementById("trackpad-card"))
+        return;
+
     e.preventDefault();
 
     lastScrollTime = performance.now();
@@ -128,55 +132,66 @@ document.addEventListener("wheel", (e) => {
     if (steps === 0) return;
 
     steps = Math.min(steps, SCROLL.maxSteps);
+
     const direction = delta > 0 ? -1 : 1;
     scrollRemainder -= steps * Math.sign(scrollRemainder);
 
-    for (let i = 0; i < steps; i++) {
+    for (let i = 0; i < steps; i++)
         sendEncrypted(mouseChar, new Int8Array([115, direction]));
-    }
 }, { passive: false });
 
-// --- KEYBOARD LOGIC ---
+// --- KEYBOARD ---
 document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // 1. BURST PASTE DETECTION (Double-tap V while holding Ctrl)
+    // --- CTRL + V DOUBLE TAP ---
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
         const now = performance.now();
-        if (now - lastVTime < 500) {
-            e.preventDefault();
-            lastVTime = 0; 
+
+        if (ctrlVState && (now - ctrlVState.time < DOUBLE_TAP_DELAY)) {
+            clearTimeout(ctrlVState.timeout);
+            ctrlVState = null;
             burstClipboard();
             return;
         }
-        lastVTime = now;
+
+        const timeout = setTimeout(() => {
+            sendEncrypted(keyChar, new Uint8Array([107, 128, 3, 118]));
+            ctrlVState = null;
+        }, DOUBLE_TAP_DELAY);
+
+        ctrlVState = { time: now, timeout };
+        return;
     }
 
-    // 2. Modifiers bitmask
+    // Modifiers
     let mod = 0;
     if (e.shiftKey) mod |= 1;
     if (e.ctrlKey) mod |= 2;
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
-    // 3. OS-LEVEL INTERRUPT REMAPS
+    // --- OS INTERRUPT REMAPS ---
     if (e.ctrlKey && e.key === "`") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); 
-        return;
-    }
-    if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9])); 
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
         return;
     }
 
-    // 4. ESCAPE LOGIC (3x ` -> ESC)
+    if (e.ctrlKey && e.key === "Tab") {
+        e.preventDefault();
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+        return;
+    }
+
+    // --- ESCAPE LOGIC (3x ` -> ESC) ---
     if (e.key === "`") {
         e.preventDefault();
         tickCount++;
         clearTimeout(tickTime);
+
         if (tickCount === 3) {
             sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0]));
             tickCount = 0;
@@ -192,7 +207,7 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // 5. SHORTCUTS (Ctrl/Cmd + Key) -> Arduino Mode 3 (Ctrl) or 4 (Meta)
+    // Shortcuts
     if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
         const mode = e.metaKey ? 4 : 3;
         const charCode = e.key.toLowerCase().charCodeAt(0);
@@ -200,13 +215,15 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 6. NAVIGATION & FUNCTION KEYS (Mode 1)
+    // Navigation
     const nav = {
-        Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38,
-        ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
+        Backspace: 8, Tab: 9, Enter: 13, Escape: 27,
+        ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+        Insert: 45, Delete: 46,
         Home: 36, End: 35, PageUp: 33, PageDown: 34,
-        F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
-        F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123
+        F1: 112, F2: 113, F3: 114, F4: 115, F5: 116,
+        F6: 117, F7: 118, F8: 119, F9: 120,
+        F10: 121, F11: 122, F12: 123
     };
 
     if (nav[e.key]) {
@@ -214,19 +231,19 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 7. PLAIN TYPING
-    if (e.key.length === 1) {
+    // Plain typing
+    if (e.key.length === 1)
         sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
-    }
 });
 
-// --- SCROLL DECAY ANIMATION ---
+// --- SCROLL DECAY ---
 function decayScrollRemainder() {
     const now = performance.now();
     if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
         const dt = now - lastScrollTime;
         scrollRemainder *= Math.pow(scrollDecay, dt / 16);
-        if (Math.abs(scrollRemainder) < 0.01) scrollRemainder = 0;
+        if (Math.abs(scrollRemainder) < 0.01)
+            scrollRemainder = 0;
     }
     requestAnimationFrame(decayScrollRemainder);
 }
