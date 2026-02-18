@@ -2,6 +2,32 @@ const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/content
 let hasAttemptedConnection = false;
 let selectedFileArray = null;
 
+function loadSettingsFromStorage() {
+    // Mouse Sensitivity
+    const savedSens = localStorage.getItem("mouseSensitivity");
+    if (savedSens) {
+        mouseSensitivity = parseFloat(savedSens);
+        document.getElementById("sensSlider").value = mouseSensitivity;
+        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+    }
+
+    // Scroll Decay
+    const savedDecay = localStorage.getItem("scrollDecay");
+    if (savedDecay) {
+        scrollDecay = parseFloat(savedDecay);
+        document.getElementById("scrollDecay").value = scrollDecay;
+        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+    }
+
+    // Scroll Boost
+    const savedBoost = localStorage.getItem("scrollBoost");
+    if (savedBoost) {
+        scrollBoost = parseFloat(savedBoost);
+        document.getElementById("scrollBoost").value = scrollBoost;
+        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+    }
+}
+
 window.onload = async () => {
     // 1. Check for saved keys in IndexedDB
     const savedKey = await getKeyFromDB();
@@ -15,6 +41,7 @@ window.onload = async () => {
     
     // 2. Initialize all interactive UI elements
     initUIListeners();
+    loadSettingsFromStorage();
 };
 
 function initUIListeners() {
