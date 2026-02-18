@@ -11,7 +11,10 @@ let tickCount = 0, tickTime;
 // Burst Paste State
 let lastVTime = 0;
 let pendingPasteTimeout = null;
-const BURST_DELAY = 75; // 75ms for ESP32 and HID stability
+
+// --- INCREASED DELAY FOR RELIABILITY ---
+// Increased to 100ms to allow for slower OS processing
+const BURST_DELAY = 100; 
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -26,19 +29,18 @@ const scrollCurve = (delta) => {
     return abs < 10 ? abs * scrollBoost : abs;
 };
 
-// --- BURST PASTE (Reverted to original newline logic) ---
+// --- BURST PASTE (Ctrl + V + V) ---
 async function burstClipboard() {
     try {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
-        // Normalize newlines to \n
         const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
         
-        // Explicitly release all keys
+        // Explicitly release all keys to ensure clean slate
         sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])); 
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
@@ -47,17 +49,16 @@ async function burstClipboard() {
             if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
             if (char === '\n') {
-                // --- RESTORED ORIGINAL LOGIC ---
-                // ASCII 13 (Enter), Mode 1 (Special), Mod 1 (Shift)
+                // Return / Newline (Matches original firmware logic)
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1])); 
-                await new Promise(r => setTimeout(r, 40));
+                // --- INCREASED DELAY FOR NEWLINE ---
+                await new Promise(r => setTimeout(r, 50)); 
                 
                 // Explicit Release
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
-                await new Promise(r => setTimeout(r, 20));
-                // -------------------------------
+                await new Promise(r => setTimeout(r, 30));
             } else {
-                // Normal Typing (ASCII, Mode 0, Mod 0)
+                // Normal Typing
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
@@ -147,26 +148,28 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // 1. BURST PASTE DETECTION
+    // 1. SMART PASTE DETECTION
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
-        e.preventDefault(); // IGNORE DEFAULT PASTE
-        e.stopPropagation();
-
         const now = performance.now();
+        
+        // If second V pressed within 300ms -> Burst
         if (now - lastVTime < 300) {
-            // Second V pressed fast -> Burst
+            e.preventDefault(); // Stop default browser paste
+            e.stopPropagation();
             clearTimeout(pendingPasteTimeout);
             lastVTime = 0; 
             burstClipboard();
-        } else {
-            // First V pressed -> Wait to see if it's a double tap
-            lastVTime = now;
-            pendingPasteTimeout = setTimeout(() => {
-                // If no second V, send a single Ctrl+V command
-                sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
-                setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
-            }, 300);
+            return;
         }
+
+        // First V pressed -> Setup detection for second V
+        lastVTime = now;
+        
+        pendingPasteTimeout = setTimeout(() => {
+            // No second V pressed, browser will handle single Ctrl+V normally
+            lastVTime = 0;
+        }, 300);
+        
         return;
     }
 
