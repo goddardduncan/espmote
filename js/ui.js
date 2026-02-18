@@ -1,55 +1,31 @@
-// js/ui.js
-
-// Load saved values on page startup
-let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
-let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
-let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
-let aesKeyParsed = null;
-
-// --- Helper function to ensure DOM elements exist ---
-function getElement(id) {
-    const el = document.getElementById(id);
-    if (!el) console.error(`Element not found: ${id}`);
-    return el;
-}
+const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+let hasAttemptedConnection = false;
+let selectedFileArray = null;
 
 window.onload = async () => {
-    console.log("UI Loading...");
-
-    // 1. Set Slider UI to match loaded values
-    getElement("sensSlider").value = mouseSensitivity;
-    getElement("sensValue").innerText = mouseSensitivity.toFixed(1);
-    
-    getElement("scrollDecay").value = scrollDecay;
-    getElement("scrollDecayVal").innerText = scrollDecay.toFixed(3);
-    
-    getElement("scrollBoost").value = scrollBoost;
-    getElement("scrollBoostVal").innerText = scrollBoost.toFixed(1);
-
-    // 2. Check for saved keys in IndexedDB
+    // 1. Check for saved keys in IndexedDB
     const savedKey = await getKeyFromDB();
     if (savedKey) {
-        getElement("aesKey").value = savedKey;
-        getElement("keyWrapper").style.display = "none";
-        getElement("confirmBtn").style.display = "none";
-        getElement("changeKeyBtn").style.display = "none";
+        document.getElementById("aesKey").value = savedKey;
+        document.getElementById("keyWrapper").style.display = "none";
+        document.getElementById("confirmBtn").style.display = "none";
+        document.getElementById("changeKeyBtn").style.display = "none";
         updateActiveKey();
     }
     
-    // 3. Initialize all interactive UI elements
+    // 2. Initialize all interactive UI elements
     initUIListeners();
-    console.log("UI Loaded.");
 };
 
 function initUIListeners() {
     // --- Bluetooth Connection ---
-    getElement("connectBtn").onclick = async () => {
+    document.getElementById("connectBtn").onclick = async () => {
         if (!updateActiveKey()) {
             alert("Please enter a valid 16-character AES key first.");
             return;
         }
 
-        getElement("status").innerText = "Requesting device...";
+        document.getElementById("status").innerText = "Requesting device...";
 
         try {
             const device = await navigator.bluetooth.requestDevice({
@@ -60,7 +36,7 @@ function initUIListeners() {
                 optionalServices: [UUIDS.SERVICE],
             });
 
-            getElement("status").innerText = "Connecting...";
+            document.getElementById("status").innerText = "Connecting...";
             const server = await device.gatt.connect();
             const service = await server.getPrimaryService(UUIDS.SERVICE);
             
@@ -69,77 +45,68 @@ function initUIListeners() {
             keyChar = await service.getCharacteristic(UUIDS.KEY);
             otaChar = await service.getCharacteristic(UUIDS.OTA);
 
-            getElement("status").innerText = "Connected";
-            getElement("connectBtn").style.display = "none";
-            getElement("ota-panel").style.display = "block";
+            document.getElementById("status").innerText = "Connected";
+            document.getElementById("connectBtn").style.display = "none";
+            document.getElementById("ota-panel").style.display = "block";
             
             hasAttemptedConnection = true;
             loadGitHubFiles();
 
             device.addEventListener("gattserverdisconnected", () => {
-                getElement("status").innerText = "Disconnected. Reloading...";
+                document.getElementById("status").innerText = "Disconnected. Reloading...";
                 setTimeout(() => location.reload(), 1500);
             });
 
         } catch (e) {
             console.error(e);
-            getElement("status").innerText = "Error: " + e.message;
+            document.getElementById("status").innerText = "Error: " + e.message;
         }
     };
 
     // --- Sliders (Mouse & Scroll) ---
-    const s = getElement("sensSlider");
-    if (s) {
-        s.addEventListener("input", (e) => {
-            mouseSensitivity = parseFloat(e.target.value);
-            getElement("sensValue").innerText = mouseSensitivity.toFixed(1);
-            localStorage.setItem("mouseSensitivity", mouseSensitivity);
-            console.log("Sensitivity:", mouseSensitivity);
-        });
-    }
+    const s = document.getElementById("sensSlider");
+    s.oninput = (e) => {
+        mouseSensitivity = parseFloat(e.target.value);
+        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+        localStorage.setItem("mouseSensitivity", mouseSensitivity);
+    };
 
-    const d = getElement("scrollDecay");
-    if (d) {
-        d.addEventListener("input", (e) => {
-            scrollDecay = parseFloat(e.target.value);
-            getElement("scrollDecayVal").innerText = scrollDecay.toFixed(3);
-            localStorage.setItem("scrollDecay", scrollDecay);
-            console.log("Decay:", scrollDecay);
-        });
-    }
+    const d = document.getElementById("scrollDecay");
+    d.oninput = (e) => {
+        scrollDecay = parseFloat(e.target.value);
+        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+        localStorage.setItem("scrollDecay", scrollDecay);
+    };
 
-    const b = getElement("scrollBoost");
-    if (b) {
-        b.addEventListener("input", (e) => {
-            scrollBoost = parseFloat(e.target.value);
-            getElement("scrollBoostVal").innerText = scrollBoost.toFixed(1);
-            localStorage.setItem("scrollBoost", scrollBoost);
-            console.log("Boost:", scrollBoost);
-        });
-    }
+    const b = document.getElementById("scrollBoost");
+    b.oninput = (e) => {
+        scrollBoost = parseFloat(e.target.value);
+        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+        localStorage.setItem("scrollBoost", scrollBoost);
+    };
 
     // --- Key Management ---
-    getElement("togglePass").onclick = () => {
-        const input = getElement("aesKey");
+    document.getElementById("togglePass").onclick = () => {
+        const input = document.getElementById("aesKey");
         input.type = input.type === "password" ? "text" : "password";
     };
 
-    getElement("confirmBtn").onclick = async () => {
-        const val = getElement("aesKey").value;
+    document.getElementById("confirmBtn").onclick = async () => {
+        const val = document.getElementById("aesKey").value;
         if (val.length === 16) {
             await saveKeyToDB(val);
-            getElement("keyWrapper").style.display = "none";
-            getElement("confirmBtn").style.display = "none";
-            getElement("changeKeyBtn").style.display = "none";
+            document.getElementById("keyWrapper").style.display = "none";
+            document.getElementById("confirmBtn").style.display = "none";
+            document.getElementById("changeKeyBtn").style.display = "none";
             alert("Key saved to secure storage.");
         } else {
             alert("Key must be exactly 16 characters.");
         }
     };
 
-    getElement("changeKeyBtn").onclick = () => {
+    document.getElementById("changeKeyBtn").onclick = () => {
         if (updateActiveKey()) {
-            const btn = getElement("changeKeyBtn");
+            const btn = document.getElementById("changeKeyBtn");
             const originalText = btn.innerText;
             btn.innerText = "Key Updated!";
             setTimeout(() => (btn.innerText = originalText), 1500);
@@ -147,48 +114,41 @@ function initUIListeners() {
     };
 
     // --- Trackpad Activation ---
-    const card = getElement("trackpad-card");
+    const card = document.getElementById("trackpad-card");
     card.onclick = function() {
-        if (typeof mouseChar !== 'undefined' && mouseChar) this.requestPointerLock();
+        if (mouseChar) this.requestPointerLock();
     };
 
     document.addEventListener("pointerlockchange", () => {
         const locked = document.pointerLockElement === card;
         card.classList.toggle("active", locked);
-        getElement("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
+        document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
         
         // Show setup buttons only when trackpad is NOT active
-        const keyWrapper = getElement("keyWrapper");
-        const isKeySaved = keyWrapper.style.display === "none";
-        
+        const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
         if (!locked && hasAttemptedConnection && !isKeySaved) {
-            getElement("changeKeyBtn").style.display = "inline-block";
-            getElement("confirmBtn").style.display = "inline-block";
+            document.getElementById("changeKeyBtn").style.display = "inline-block";
+            document.getElementById("confirmBtn").style.display = "inline-block";
         } else {
-            getElement("changeKeyBtn").style.display = "none";
-            getElement("confirmBtn").style.display = "none";
+            document.getElementById("changeKeyBtn").style.display = "none";
+            document.getElementById("confirmBtn").style.display = "none";
         }
     });
 
     // --- OTA Firmware Panel ---
-    getElement("otaToggle").onclick = () => {
-        const c = getElement("ota-controls");
+    document.getElementById("otaToggle").onclick = () => {
+        const c = document.getElementById("ota-controls");
         c.style.display = c.style.display === "flex" ? "none" : "flex";
     };
 
-    getElement("resetBtn").onclick = () => {
-        if(typeof resetApp === 'function') resetApp();
-    };
+    document.getElementById("resetBtn").onclick = resetApp;
 }
 
 function updateActiveKey() {
-    const val = getElement("aesKey").value;
+    const val = document.getElementById("aesKey").value;
     if (val.length !== 16) return false;
-    if (typeof CryptoJS !== 'undefined') {
-        aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
-        return true;
-    }
-    return false;
+    aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
+    return true;
 }
 
 // --- GitHub Firmware Loader ---
@@ -196,7 +156,7 @@ async function loadGitHubFiles() {
     try {
         const res = await fetch(REPO_API_URL);
         const files = await res.json();
-        const list = getElement("fileList");
+        const list = document.getElementById("fileList");
         list.innerHTML = "";
         
         files.filter(f => f.name.endsWith(".bin")).forEach(file => {
@@ -205,14 +165,14 @@ async function loadGitHubFiles() {
             div.innerHTML = `<span>📦 ${file.name}</span>`;
             
             div.onclick = async () => {
-                getElement("otaStatus").innerText = "Downloading...";
-                getElement("updateBtn").disabled = true;
+                document.getElementById("otaStatus").innerText = "Downloading...";
+                document.getElementById("updateBtn").disabled = true;
                 
                 const fRes = await fetch(file.download_url);
                 selectedFileArray = new Uint8Array(await fRes.arrayBuffer());
                 
-                getElement("otaStatus").innerText = `Ready: ${file.name}`;
-                getElement("updateBtn").disabled = false;
+                document.getElementById("otaStatus").innerText = `Ready: ${file.name}`;
+                document.getElementById("updateBtn").disabled = false;
                 
                 Array.from(list.children).forEach(c => c.classList.remove("selected"));
                 div.classList.add("selected");
@@ -220,16 +180,16 @@ async function loadGitHubFiles() {
             list.appendChild(div);
         });
     } catch (e) { 
-        getElement("fileList").innerText = "Error loading builds."; 
+        document.getElementById("fileList").innerText = "Error loading builds."; 
     }
 }
 
 // --- OTA Update Trigger ---
-getElement("updateBtn").onclick = async () => {
-    if (!selectedFileArray || typeof otaChar === 'undefined' || !otaChar) return;
+document.getElementById("updateBtn").onclick = async () => {
+    if (!selectedFileArray || !otaChar) return;
     
-    const pBar = getElement("pBar");
-    const pFill = getElement("pFill");
+    const pBar = document.getElementById("pBar");
+    const pFill = document.getElementById("pFill");
     pBar.style.display = "block";
     
     // Start Message: 'B' + Size (4 bytes)
@@ -249,10 +209,10 @@ getElement("updateBtn").onclick = async () => {
         
         let pct = Math.round((i / selectedFileArray.length) * 100);
         pFill.style.width = pct + "%";
-        getElement("otaStatus").innerText = `Updating: ${pct}%`;
+        document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
     }
     
     // End Message: 'E'
     await otaChar.writeValue(new Uint8Array([69])); 
-    getElement("otaStatus").innerText = "Success! Rebooting...";
+    document.getElementById("otaStatus").innerText = "Success! Rebooting...";
 };
