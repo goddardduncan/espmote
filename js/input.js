@@ -56,7 +56,7 @@ async function burstClipboard() {
             if (statusEl)
                 statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // Newline handling
+            // Handle newline
             if (char === "\n") {
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
@@ -69,24 +69,17 @@ async function burstClipboard() {
             let mod = 0;
             let baseChar = char;
 
-            // Uppercase letters
             if (char >= 'A' && char <= 'Z') {
                 mod |= 1;
                 baseChar = char.toLowerCase();
-            }
-            // Shift-required symbols
-            else if (SHIFT_REQUIRED[char]) {
+            } else if (SHIFT_REQUIRED[char]) {
                 mod |= 1;
                 baseChar = SHIFT_REQUIRED[char];
             }
 
             const charCode = baseChar.charCodeAt(0);
 
-            sendEncrypted(
-                keyChar,
-                new Uint8Array([107, charCode, 0, mod])
-            );
-
+            sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
@@ -200,7 +193,7 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // ================= CMD/CTRL + V LOGIC =================
+    // ================= CTRL/CMD + V =================
 
     const isPasteCombo =
         (e.ctrlKey || e.metaKey) &&
@@ -220,7 +213,7 @@ document.addEventListener("keydown", (e) => {
         }
 
         const timeout = setTimeout(() => {
-            const mode = e.metaKey ? 4 : 3; // Cmd=4, Ctrl=3
+            const mode = e.metaKey ? 4 : 3;
             sendEncrypted(keyChar, new Uint8Array([107, 128, mode, 118]));
             ctrlVState = null;
         }, DOUBLE_TAP_DELAY);
@@ -229,16 +222,72 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // =====================================================
-
+    // Modifiers
     let mod = 0;
     if (e.shiftKey) mod |= 1;
     if (e.ctrlKey) mod |= 2;
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
+    // --- OS INTERRUPT REMAPS ---
+    if (e.ctrlKey && e.key === "`") {
+        e.preventDefault();
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
+        return;
+    }
+
+    if (e.ctrlKey && e.key === "Tab") {
+        e.preventDefault();
+        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+        return;
+    }
+
+    // --- ESCAPE LOGIC (3x ` -> ESC) ---
+    if (e.key === "`") {
+        e.preventDefault();
+        tickCount++;
+        clearTimeout(tickTime);
+
+        if (tickCount === 3) {
+            sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0]));
+            tickCount = 0;
+        } else {
+            tickTime = setTimeout(() => {
+                if (tickCount === 1)
+                    sendEncrypted(keyChar, new Uint8Array([107, 96, 0, mod]));
+                tickCount = 0;
+            }, 500);
+        }
+        return;
+    }
+
     e.preventDefault();
 
+    // Shortcuts (Ctrl/Cmd + key)
+    if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
+        const mode = e.metaKey ? 4 : 3;
+        const charCode = e.key.toLowerCase().charCodeAt(0);
+        sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
+        return;
+    }
+
+    // Navigation
+    const nav = {
+        Backspace: 8, Tab: 9, Enter: 13, Escape: 27,
+        ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+        Insert: 45, Delete: 46,
+        Home: 36, End: 35, PageUp: 33, PageDown: 34,
+        F1: 112, F2: 113, F3: 114, F4: 115, F5: 116,
+        F6: 117, F7: 118, F8: 119, F9: 120,
+        F10: 121, F11: 122, F12: 123
+    };
+
+    if (nav[e.key]) {
+        sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
+        return;
+    }
+
+    // Plain typing
     if (e.key.length === 1)
         sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
 });
