@@ -26,18 +26,19 @@ const scrollCurve = (delta) => {
     return abs < 10 ? abs * scrollBoost : abs;
 };
 
-// --- BURST PASTE (Ctrl + V + V) ---
+// --- BURST PASTE (Reverted to original newline logic) ---
 async function burstClipboard() {
     try {
         const rawText = await navigator.clipboard.readText();
         if (!rawText) return;
 
+        // Normalize newlines to \n
         const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
         
-        // --- Explicitly release ALL keys to ensure clean slate ---
+        // Explicitly release all keys
         sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])); 
-        await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
+        await new Promise(r => setTimeout(r, 100));
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
@@ -45,14 +46,18 @@ async function burstClipboard() {
             
             if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            if (charCode === 10) {
-                // Return
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 0])); 
+            if (char === '\n') {
+                // --- RESTORED ORIGINAL LOGIC ---
+                // ASCII 13 (Enter), Mode 1 (Special), Mod 1 (Shift)
+                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1])); 
                 await new Promise(r => setTimeout(r, 40));
+                
+                // Explicit Release
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
+                // -------------------------------
             } else {
-                // Normal Typing
+                // Normal Typing (ASCII, Mode 0, Mod 0)
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
