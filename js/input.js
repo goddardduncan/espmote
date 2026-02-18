@@ -159,17 +159,21 @@ document.addEventListener("keydown", (e) => {
             clearTimeout(pendingPasteTimeout);
             lastVTime = 0; 
             burstClipboard();
-            return;
-        }
+        } else {
+            // First V pressed -> Setup detection for second V
+            lastVTime = now;
+            
+            // Prevent default to stop browser from pasting into the app
+            e.preventDefault();
+            e.stopPropagation();
 
-        // First V pressed -> Setup detection for second V
-        lastVTime = now;
-        
-        pendingPasteTimeout = setTimeout(() => {
-            // No second V pressed, browser will handle single Ctrl+V normally
-            lastVTime = 0;
-        }, 300);
-        
+            pendingPasteTimeout = setTimeout(() => {
+                // No second V pressed within timeout -> Send single Ctrl+V to client
+                sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
+                setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
+                lastVTime = 0;
+            }, 300);
+        }
         return;
     }
 
