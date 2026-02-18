@@ -1,6 +1,10 @@
 const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
 let hasAttemptedConnection = false;
 let selectedFileArray = null;
+// Load saved values on page startup
+let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
+let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
+let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
 
 window.onload = async () => {
     // 1. Check for saved keys in IndexedDB
