@@ -26,7 +26,7 @@ const scrollCurve = (delta) => {
     return abs < 10 ? abs * scrollBoost : abs;
 };
 
-// --- BURST PASTE ---
+// --- Updated BURST PASTE ---
 async function burstClipboard() {
     try {
         const rawText = await navigator.clipboard.readText();
@@ -37,38 +37,54 @@ async function burstClipboard() {
         const originalStatus = statusEl ? statusEl.innerText : "Connected";
 
         // Mapping table for characters requiring SHIFT or special codes
-        // Format: 'char': [keycode, modifier]
+        // Format: 'char': [usb_hid_keycode, modifier]
         // Modifier: 1 = Shift, 2 = Ctrl, 4 = Alt, 8 = Meta
         const specialChars = {
-            '!': [49, 1], '@': [50, 1], '#': [51, 1], '$': [52, 1], '%': [53, 1],
-            '^': [54, 1], '&': [55, 1], '*': [56, 1], '(': [57, 1], ')': [48, 1],
-            '_': [45, 1], '+': [61, 1], '{': [91, 1], '}': [93, 1], '|': [92, 1],
-            ':': [59, 1], '"': [39, 1], '<': [44, 1], '>': [46, 1], '?': [47, 1],
-            '~': [96, 1]
+            '!': [30, 1], '@': [31, 1], '#': [32, 1], '$': [33, 1], '%': [34, 1],
+            '^': [35, 1], '&': [36, 1], '*': [37, 1], '(': [38, 1], ')': [39, 1],
+            '_': [45, 1], '+': [46, 1], '{': [47, 1], '}': [48, 1], '|': [49, 1],
+            ':': [51, 1], '"': [52, 1], '<': [54, 1], '>': [55, 1], '?': [56, 1],
+            '~': [53, 1],
+            // Regular keys needed for mapping logic below
+            '[': [47, 0], ']': [48, 0], '\\': [49, 0], ';': [51, 0], "'": [52, 0],
+            ',': [54, 0], '.': [55, 0], '/': [56, 0], '`': [53, 0]
         };
 
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
             let modifier = 0;
-            let keyCode = char.charCodeAt(0);
+            let keyCode = 0;
 
             // Determine keycode and modifier based on character
             if (specialChars[char]) {
                 [keyCode, modifier] = specialChars[char];
             } else if (char >= 'A' && char <= 'Z') {
                 // Handle uppercase letters
-                keyCode = char.toLowerCase().charCodeAt(0);
+                keyCode = char.toLowerCase().charCodeAt(0) - 97 + 4; // Basic A-Z HID codes
                 modifier = 1; // Shift
+            } else if (char >= 'a' && char <= 'z') {
+                // Handle lowercase letters
+                keyCode = char.charCodeAt(0) - 97 + 4;
+            } else if (char >= '0' && char <= '9') {
+                // Handle numbers
+                keyCode = char === '0' ? 39 : char.charCodeAt(0) - 48 + 29;
+            } else if (char === '\n') {
+                keyCode = 40; // Enter
+            } else if (char === ' ') {
+                keyCode = 44; // Space
+            } else {
+                // Fallback for other characters
+                keyCode = char.charCodeAt(0);
             }
 
             if (statusEl)
                 statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            // --- Updated packet structure to include modifier ---
+            // --- Updated packet structure ---
             // Packet: [Command, KeyCode, Modifier, Reserved]
             if (char === '\n') {
                 // Enter
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 0, 0]));
+                sendEncrypted(keyChar, new Uint8Array([107, 40, 0, 0]));
                 await new Promise(r => setTimeout(r, 40));
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
@@ -92,7 +108,6 @@ async function burstClipboard() {
         if (statusEl) statusEl.innerText = "Clipboard Error";
     }
 }
-
 // --- MOUSE MOVEMENT ---
 document.addEventListener("mousemove", (e) => {
     const card = document.getElementById("trackpad-card");
