@@ -9,15 +9,15 @@ let scrollRemainder = 0, lastScrollTime = 0;
 let tickCount = 0, tickTime;
 
 // Burst Paste State
-let pasteState = null; // { time, timeout, mode }
+let ctrlVState = null; // { time, timeout }
 const DOUBLE_TAP_DELAY = 500;
-const BURST_DELAY = 75;
+const BURST_DELAY = 75; // HID stability
 
-// Constants
+// Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
 const SCROLL = { scale: 0.02, minStep: 0.05, maxSteps: 6 };
 
-// Helpers
+// Acceleration helper
 const accelCurve = (speed) =>
     1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
 
@@ -46,6 +46,7 @@ async function burstClipboard() {
             if (charCode === 10) {
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
+
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
             } else {
@@ -117,9 +118,10 @@ document.addEventListener("wheel", (e) => {
         return;
 
     e.preventDefault();
-    lastScrollTime = performance.now();
 
+    lastScrollTime = performance.now();
     let delta = e.deltaY;
+
     if (e.deltaMode === 1) delta *= 16;
     if (e.deltaMode === 2) delta *= 100;
 
@@ -143,27 +145,24 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    const isPasteCombo = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v';
-
-    // --- CROSS PLATFORM CTRL/CMD + V DOUBLE TAP ---
-    if (isPasteCombo) {
+    // --- CTRL + V DOUBLE TAP ---
+    if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         e.preventDefault();
         const now = performance.now();
-        const mode = e.metaKey ? 4 : 3;
 
-        if (pasteState && (now - pasteState.time < DOUBLE_TAP_DELAY)) {
-            clearTimeout(pasteState.timeout);
-            pasteState = null;
+        if (ctrlVState && (now - ctrlVState.time < DOUBLE_TAP_DELAY)) {
+            clearTimeout(ctrlVState.timeout);
+            ctrlVState = null;
             burstClipboard();
             return;
         }
 
         const timeout = setTimeout(() => {
-            sendEncrypted(keyChar, new Uint8Array([107, 128, mode, 118]));
-            pasteState = null;
+            sendEncrypted(keyChar, new Uint8Array([107, 128, 3, 118]));
+            ctrlVState = null;
         }, DOUBLE_TAP_DELAY);
 
-        pasteState = { time: now, timeout, mode };
+        ctrlVState = { time: now, timeout };
         return;
     }
 
