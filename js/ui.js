@@ -1,13 +1,25 @@
 const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
 let hasAttemptedConnection = false;
 let selectedFileArray = null;
+let aesKeyParsed = null; // Defined variable to prevent errors
+
 // Load saved values on page startup
 let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
 let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
 let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
 
 window.onload = async () => {
-    // 1. Check for saved keys in IndexedDB
+    // 1. Set Slider UI to match loaded values
+    document.getElementById("sensSlider").value = mouseSensitivity;
+    document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+    
+    document.getElementById("scrollDecay").value = scrollDecay;
+    document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+    
+    document.getElementById("scrollBoost").value = scrollBoost;
+    document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+
+    // 2. Check for saved keys in IndexedDB
     const savedKey = await getKeyFromDB();
     if (savedKey) {
         document.getElementById("aesKey").value = savedKey;
@@ -17,7 +29,7 @@ window.onload = async () => {
         updateActiveKey();
     }
     
-    // 2. Initialize all interactive UI elements
+    // 3. Initialize all interactive UI elements
     initUIListeners();
 };
 
