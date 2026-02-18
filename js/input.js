@@ -13,8 +13,8 @@ let lastVTime = 0;
 let pendingPasteTimeout = null;
 
 // --- INCREASED DELAY FOR RELIABILITY ---
-// Increased to 100ms to allow for slower OS processing
-const BURST_DELAY = 100; 
+// Increased to 120ms to allow for slower target OS processing
+const BURST_DELAY = 120; 
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -38,21 +38,29 @@ async function burstClipboard() {
         const text = rawText.replace(/\r\n|\r/g, '\n');
         const statusEl = document.getElementById("status");
         
-        // Explicitly release all keys to ensure clean slate
+        // 1. Explicitly release all keys to ensure clean slate
         sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])); 
         await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
 
+        // 2. Perform the initial Ctrl+V to initiate paste in the target app
+        // [107, key, modifier, special] -> 118='v', 3=Ctrl
+        sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); 
+        await new Promise(r => setTimeout(r, 50));
+        
+        // 3. Release Ctrl+V
+        sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
+        await new Promise(r => setTimeout(r, 100)); // Crucial delay for OS to react
+
+        // 4. Type the text
         for (let i = 0; i < text.length; i++) {
-            let char = text[i];
-            let charCode = char.charCodeAt(0);
+            let charCode = text.charCodeAt(i);
             
             if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
 
-            if (char === '\n') {
+            if (text[i] === '\n') {
                 // Return / Newline (Matches original firmware logic)
                 sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1])); 
-                // --- INCREASED DELAY FOR NEWLINE ---
-                await new Promise(r => setTimeout(r, 50)); 
+                await new Promise(r => setTimeout(r, 50)); // Delay for Newline
                 
                 // Explicit Release
                 sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
@@ -152,7 +160,7 @@ document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         const now = performance.now();
         
-        // Immediate prevent default for all Ctrl+V scenarios to stop browser paste
+        // Immediate prevent default to stop browser paste
         e.preventDefault();
         e.stopPropagation();
 
