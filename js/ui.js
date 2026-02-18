@@ -1,264 +1,245 @@
-// Local variables for mouse and scroll state
-let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
-let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
-let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+let hasAttemptedConnection = false;
+let selectedFileArray = null;
 
-let lastMoveTime = performance.now();
-let smoothX = 0, smoothY = 0;
-let scrollRemainder = 0, lastScrollTime = 0;
-let tickCount = 0, tickTime;
+function loadSettingsFromStorage() {
+    // Mouse Sensitivity
+    const savedSens = localStorage.getItem("mouseSensitivity");
+    if (savedSens) {
+        mouseSensitivity = parseFloat(savedSens);
+        document.getElementById("sensSlider").value = mouseSensitivity;
+        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+    }
 
-// Burst Paste State
-let lastVTime = 0;
-let pendingPasteTimeout = null;
+    // Scroll Decay
+    const savedDecay = localStorage.getItem("scrollDecay");
+    if (savedDecay) {
+        scrollDecay = parseFloat(savedDecay);
+        document.getElementById("scrollDecay").value = scrollDecay;
+        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+    }
 
-// --- INCREASED DELAY FOR RELIABILITY ---
-// Increased to 120ms to allow for slower target OS processing
-const BURST_DELAY = 120; 
+    // Scroll Boost
+    const savedBoost = localStorage.getItem("scrollBoost");
+    if (savedBoost) {
+        scrollBoost = parseFloat(savedBoost);
+        document.getElementById("scrollBoost").value = scrollBoost;
+        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+    }
+}
 
-// Constants for behavior
-const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
-const SCROLL = { scale: 0.02, minStep: 0.05, maxSteps: 6 };
-
-// Acceleration helper for cursor movement
-const accelCurve = (speed) => 1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
-
-// Curve helper for scrolling
-const scrollCurve = (delta) => {
-    const abs = Math.abs(delta);
-    return abs < 10 ? abs * scrollBoost : abs;
+window.onload = async () => {
+    // 1. Check for saved keys in IndexedDB
+    const savedKey = await getKeyFromDB();
+    if (savedKey) {
+        document.getElementById("aesKey").value = savedKey;
+        document.getElementById("keyWrapper").style.display = "none";
+        document.getElementById("confirmBtn").style.display = "none";
+        document.getElementById("changeKeyBtn").style.display = "none";
+        updateActiveKey();
+    }
+    
+    // 2. Initialize all interactive UI elements
+    initUIListeners();
+    loadSettingsFromStorage();
 };
 
-// --- BURST PASTE (Ctrl + V + V) ---
-async function burstClipboard() {
-    try {
-        const rawText = await navigator.clipboard.readText();
-        if (!rawText) return;
+function initUIListeners() {
+    // --- Bluetooth Connection ---
+    document.getElementById("connectBtn").onclick = async () => {
+        if (!updateActiveKey()) {
+            alert("Please enter a valid 16-character AES key first.");
+            return;
+        }
 
-        const text = rawText.replace(/\r\n|\r/g, '\n');
-        const statusEl = document.getElementById("status");
-        
-        // 1. Explicitly release all keys to ensure clean slate
-        sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])); 
-        await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
+        document.getElementById("status").innerText = "Requesting device...";
 
-        // 2. Perform the initial Ctrl+V to initiate paste in the target app
-        // [107, key, modifier, special] -> 118='v', 3=Ctrl
-        sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); 
-        await new Promise(r => setTimeout(r, 50));
-        
-        // 3. Release Ctrl+V
-        sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
-        await new Promise(r => setTimeout(r, 100)); // Crucial delay for OS to react
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [
+                    { namePrefix: "XIAO-" },
+                    { namePrefix: "nimble" } 
+                ],
+                optionalServices: [UUIDS.SERVICE],
+            });
 
-        // 4. Type the text
-        for (let i = 0; i < text.length; i++) {
-            let charCode = text.charCodeAt(i);
+            document.getElementById("status").innerText = "Connecting...";
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(UUIDS.SERVICE);
             
-            if (statusEl) statusEl.innerText = `🚀 Sending: ${i + 1}/${text.length}`;
+            // Assign global characteristics defined in ble.js
+            mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
+            keyChar = await service.getCharacteristic(UUIDS.KEY);
+            otaChar = await service.getCharacteristic(UUIDS.OTA);
 
-            if (text[i] === '\n') {
-                // Return / Newline (Matches original firmware logic)
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1])); 
-                await new Promise(r => setTimeout(r, 50)); // Delay for Newline
-                
-                // Explicit Release
-                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
-                await new Promise(r => setTimeout(r, 30));
-            } else {
-                // Normal Typing
-                sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
-            }
+            document.getElementById("status").innerText = "Connected";
+            document.getElementById("connectBtn").style.display = "none";
+            document.getElementById("ota-panel").style.display = "block";
             
-            await new Promise(r => setTimeout(r, BURST_DELAY));
+            hasAttemptedConnection = true;
+            loadGitHubFiles();
+
+            device.addEventListener("gattserverdisconnected", () => {
+                document.getElementById("status").innerText = "Disconnected. Reloading...";
+                setTimeout(() => location.reload(), 1500);
+            });
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById("status").innerText = "Error: " + e.message;
         }
-
-        if (statusEl) {
-            statusEl.innerText = "Paste Complete!";
-            setTimeout(() => { statusEl.innerText = "Connected"; }, 2000);
-        }
-    } catch (err) {
-        console.error("Clipboard error:", err);
-        if (statusEl) statusEl.innerText = "Clipboard Error";
-    }
-}
-
-// --- MOUSE MOVEMENT ---
-document.addEventListener("mousemove", (e) => {
-    const card = document.getElementById("trackpad-card");
-    if (document.pointerLockElement !== card) return;
-
-    const now = performance.now();
-    const dt = Math.max(now - lastMoveTime, 1);
-    lastMoveTime = now;
-
-    const rawX = e.movementX;
-    const rawY = e.movementY;
-
-    const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
-    smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
-    smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
-
-    if (Math.abs(smoothX) < TRACKPAD.deadzone) smoothX = 0;
-    if (Math.abs(smoothY) < TRACKPAD.deadzone) smoothY = 0;
-
-    const accel = accelCurve(speed);
-    let outX = Math.round(smoothX * accel * mouseSensitivity);
-    let outY = Math.round(smoothY * accel * mouseSensitivity);
-
-    outX = Math.max(-127, Math.min(127, outX));
-    outY = Math.max(-127, Math.min(127, outY));
-
-    if (outX || outY) {
-        sendEncrypted(mouseChar, new Int8Array([109, outX, outY]));
-    }
-});
-
-// --- MOUSE CLICKS & DRAGGING ---
-document.addEventListener("mousedown", (e) => {
-    if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 1]));
-});
-
-document.addEventListener("mouseup", (e) => {
-    if (document.pointerLockElement === document.getElementById("trackpad-card"))
-        sendEncrypted(mouseChar, new Uint8Array([99, [1, 4, 2][e.button], 0]));
-});
-
-// --- SCROLLING ---
-document.addEventListener("wheel", (e) => {
-    if (document.pointerLockElement !== document.getElementById("trackpad-card")) return;
-    e.preventDefault();
-
-    lastScrollTime = performance.now();
-    let delta = e.deltaY;
-
-    if (e.deltaMode === 1) delta *= 16;
-    if (e.deltaMode === 2) delta *= 100;
-
-    const curved = scrollCurve(delta) * SCROLL.scale;
-    scrollRemainder += curved;
-
-    let steps = Math.floor(Math.abs(scrollRemainder));
-    if (steps === 0) return;
-
-    steps = Math.min(steps, SCROLL.maxSteps);
-    const direction = delta > 0 ? -1 : 1;
-    scrollRemainder -= steps * Math.sign(scrollRemainder);
-
-    for (let i = 0; i < steps; i++) {
-        sendEncrypted(mouseChar, new Int8Array([115, direction]));
-    }
-}, { passive: false });
-
-// --- KEYBOARD LOGIC ---
-document.addEventListener("keydown", (e) => {
-    const card = document.getElementById("trackpad-card");
-    if (document.pointerLockElement !== card || !keyChar) return;
-
-    // 1. SMART PASTE DETECTION
-    if (e.ctrlKey && e.key.toLowerCase() === 'v') {
-        const now = performance.now();
-        
-        // Immediate prevent default to stop browser paste
-        e.preventDefault();
-        e.stopPropagation();
-
-        // If second V pressed within 500ms -> Burst
-        if (now - lastVTime < 500) {
-            clearTimeout(pendingPasteTimeout);
-            lastVTime = 0; 
-            burstClipboard();
-        } else {
-            // First V pressed -> Setup detection for second V
-            lastVTime = now;
-            
-            pendingPasteTimeout = setTimeout(() => {
-                // No second V pressed within 500ms -> Send single Ctrl+V to client
-                sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
-                setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
-                lastVTime = 0;
-            }, 500);
-        }
-        return;
-    }
-
-    // 2. Modifiers bitmask
-    let mod = 0;
-    if (e.shiftKey) mod |= 1;
-    if (e.ctrlKey) mod |= 2;
-    if (e.altKey) mod |= 4;
-    if (e.metaKey) mod |= 8;
-
-    // 3. OS-LEVEL INTERRUPT REMAPS
-    if (e.ctrlKey && e.key === "`") {
-        e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); 
-        return;
-    }
-    if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9])); 
-        return;
-    }
-
-    // 4. ESCAPE LOGIC (3x ` -> ESC)
-    if (e.key === "`") {
-        e.preventDefault();
-        tickCount++;
-        clearTimeout(tickTime);
-        if (tickCount === 3) {
-            sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0]));
-            tickCount = 0;
-        } else {
-            tickTime = setTimeout(() => {
-                if (tickCount === 1)
-                    sendEncrypted(keyChar, new Uint8Array([107, 96, 0, mod]));
-                tickCount = 0;
-            }, 500);
-        }
-        return;
-    }
-
-    e.preventDefault();
-
-    // 5. SHORTCUTS (Ctrl/Cmd + Key) -> Arduino Mode 3 (Ctrl) or 4 (Meta)
-    if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
-        const mode = e.metaKey ? 4 : 3;
-        const charCode = e.key.toLowerCase().charCodeAt(0);
-        sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
-        return;
-    }
-
-    // 6. NAVIGATION & FUNCTION KEYS (Mode 1)
-    const nav = {
-        Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38,
-        ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
-        Home: 36, End: 35, PageUp: 33, PageDown: 34,
-        F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
-        F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123
     };
 
-    if (nav[e.key]) {
-        sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
-        return;
-    }
+    // --- Sliders (Mouse & Scroll) ---
+    const s = document.getElementById("sensSlider");
+    s.oninput = (e) => {
+        mouseSensitivity = parseFloat(e.target.value);
+        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
+        localStorage.setItem("mouseSensitivity", mouseSensitivity);
+    };
 
-    // 7. PLAIN TYPING
-    if (e.key.length === 1) {
-        sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
-    }
-});
+    const d = document.getElementById("scrollDecay");
+    d.oninput = (e) => {
+        scrollDecay = parseFloat(e.target.value);
+        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
+        localStorage.setItem("scrollDecay", scrollDecay);
+    };
 
-// --- SCROLL DECAY ANIMATION ---
-function decayScrollRemainder() {
-    const now = performance.now();
-    if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
-        const dt = now - lastScrollTime;
-        scrollRemainder *= Math.pow(scrollDecay, dt / 16);
-        if (Math.abs(scrollRemainder) < 0.01) scrollRemainder = 0;
-    }
-    requestAnimationFrame(decayScrollRemainder);
+    const b = document.getElementById("scrollBoost");
+    b.oninput = (e) => {
+        scrollBoost = parseFloat(e.target.value);
+        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
+        localStorage.setItem("scrollBoost", scrollBoost);
+    };
+
+    // --- Key Management ---
+    document.getElementById("togglePass").onclick = () => {
+        const input = document.getElementById("aesKey");
+        input.type = input.type === "password" ? "text" : "password";
+    };
+
+    document.getElementById("confirmBtn").onclick = async () => {
+        const val = document.getElementById("aesKey").value;
+        if (val.length === 16) {
+            await saveKeyToDB(val);
+            document.getElementById("keyWrapper").style.display = "none";
+            document.getElementById("confirmBtn").style.display = "none";
+            document.getElementById("changeKeyBtn").style.display = "none";
+            alert("Key saved to secure storage.");
+        } else {
+            alert("Key must be exactly 16 characters.");
+        }
+    };
+
+    document.getElementById("changeKeyBtn").onclick = () => {
+        if (updateActiveKey()) {
+            const btn = document.getElementById("changeKeyBtn");
+            const originalText = btn.innerText;
+            btn.innerText = "Key Updated!";
+            setTimeout(() => (btn.innerText = originalText), 1500);
+        }
+    };
+
+    // --- Trackpad Activation ---
+    const card = document.getElementById("trackpad-card");
+    card.onclick = function() {
+        if (mouseChar) this.requestPointerLock();
+    };
+
+    document.addEventListener("pointerlockchange", () => {
+        const locked = document.pointerLockElement === card;
+        card.classList.toggle("active", locked);
+        document.getElementById("instr").innerText = locked ? "Mode: Active" : "Tap to control device";
+        
+        // Show setup buttons only when trackpad is NOT active
+        const isKeySaved = document.getElementById("keyWrapper").style.display === "none";
+        if (!locked && hasAttemptedConnection && !isKeySaved) {
+            document.getElementById("changeKeyBtn").style.display = "inline-block";
+            document.getElementById("confirmBtn").style.display = "inline-block";
+        } else {
+            document.getElementById("changeKeyBtn").style.display = "none";
+            document.getElementById("confirmBtn").style.display = "none";
+        }
+    });
+
+    // --- OTA Firmware Panel ---
+    document.getElementById("otaToggle").onclick = () => {
+        const c = document.getElementById("ota-controls");
+        c.style.display = c.style.display === "flex" ? "none" : "flex";
+    };
+
+    document.getElementById("resetBtn").onclick = resetApp;
 }
 
-decayScrollRemainder();
+function updateActiveKey() {
+    const val = document.getElementById("aesKey").value;
+    if (val.length !== 16) return false;
+    aesKeyParsed = CryptoJS.enc.Utf8.parse(val);
+    return true;
+}
+
+// --- GitHub Firmware Loader ---
+async function loadGitHubFiles() {
+    try {
+        const res = await fetch(REPO_API_URL);
+        const files = await res.json();
+        const list = document.getElementById("fileList");
+        list.innerHTML = "";
+        
+        files.filter(f => f.name.endsWith(".bin")).forEach(file => {
+            const div = document.createElement("div");
+            div.className = "file-item";
+            div.innerHTML = `<span>📦 ${file.name}</span>`;
+            
+            div.onclick = async () => {
+                document.getElementById("otaStatus").innerText = "Downloading...";
+                document.getElementById("updateBtn").disabled = true;
+                
+                const fRes = await fetch(file.download_url);
+                selectedFileArray = new Uint8Array(await fRes.arrayBuffer());
+                
+                document.getElementById("otaStatus").innerText = `Ready: ${file.name}`;
+                document.getElementById("updateBtn").disabled = false;
+                
+                Array.from(list.children).forEach(c => c.classList.remove("selected"));
+                div.classList.add("selected");
+            };
+            list.appendChild(div);
+        });
+    } catch (e) { 
+        document.getElementById("fileList").innerText = "Error loading builds."; 
+    }
+}
+
+// --- OTA Update Trigger ---
+document.getElementById("updateBtn").onclick = async () => {
+    if (!selectedFileArray || !otaChar) return;
+    
+    const pBar = document.getElementById("pBar");
+    const pFill = document.getElementById("pFill");
+    pBar.style.display = "block";
+    
+    // Start Message: 'B' + Size (4 bytes)
+    const beginMsg = new Uint8Array(5);
+    beginMsg[0] = 66; 
+    new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
+    await otaChar.writeValue(beginMsg);
+
+    // Chunk Data: 'D' + 128 bytes
+    for (let i = 0; i < selectedFileArray.length; i += 128) {
+        const chunk = selectedFileArray.slice(i, i + 128);
+        const dataMsg = new Uint8Array(chunk.length + 1);
+        dataMsg[0] = 68; 
+        dataMsg.set(chunk, 1);
+        
+        await otaChar.writeValue(dataMsg);
+        
+        let pct = Math.round((i / selectedFileArray.length) * 100);
+        pFill.style.width = pct + "%";
+        document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
+    }
+    
+    // End Message: 'E'
+    await otaChar.writeValue(new Uint8Array([69])); 
+    document.getElementById("otaStatus").innerText = "Success! Rebooting...";
+};
