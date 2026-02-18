@@ -12,9 +12,11 @@ let tickCount = 0, tickTime;
 let lastVTime = 0;
 let pendingPasteTimeout = null;
 
-// --- INCREASED DELAY FOR RELIABILITY ---
-// Increased to 120ms to allow for slower target OS processing
-const BURST_DELAY = 120; 
+// --- OPTIMIZED DELAYS FOR RELIABILITY ---
+// Time in ms to wait for a second 'V' press for burst paste
+const PASTE_DETECTION_DELAY = 150; 
+// Time in ms between typed characters during burst paste
+const BURST_TYPE_DELAY = 120; 
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -43,8 +45,8 @@ async function burstClipboard() {
         await new Promise(r => setTimeout(r, 100)); // Delay to allow device to process release
 
         // 2. Perform the initial Ctrl+V to initiate paste in the target app
-        // [107, key, modifier, special] -> 118='v', 3=Ctrl
-        sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); 
+        // [107, key, modifier, special] -> 118='v', 2=Ctrl
+        sendEncrypted(keyChar, new Uint8Array([107, 118, 2, 0])); 
         await new Promise(r => setTimeout(r, 50));
         
         // 3. Release Ctrl+V
@@ -70,7 +72,7 @@ async function burstClipboard() {
                 sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, 0]));
             }
             
-            await new Promise(r => setTimeout(r, BURST_DELAY));
+            await new Promise(r => setTimeout(r, BURST_TYPE_DELAY));
         }
 
         if (statusEl) {
@@ -156,7 +158,7 @@ document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
 
-    // 1. SMART PASTE DETECTION
+    // --- 1. SMART PASTE DETECTION ---
     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
         const now = performance.now();
         
@@ -164,8 +166,8 @@ document.addEventListener("keydown", (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        // If second V pressed within 500ms -> Burst
-        if (now - lastVTime < 500) {
+        // If second V pressed within window -> Burst
+        if (now - lastVTime < PASTE_DETECTION_DELAY) {
             clearTimeout(pendingPasteTimeout);
             lastVTime = 0; 
             burstClipboard();
@@ -174,23 +176,33 @@ document.addEventListener("keydown", (e) => {
             lastVTime = now;
             
             pendingPasteTimeout = setTimeout(() => {
-                // No second V pressed within 500ms -> Send single Ctrl+V to client
-                sendEncrypted(keyChar, new Uint8Array([107, 118, 3, 0])); // 118='v', 3=Ctrl
-                setTimeout(() => sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0])), 50);
+                // No second V pressed -> Send single Ctrl+V to client
+                
+                // A. Press Ctrl (Modifier bit 2)
+                sendEncrypted(keyChar, new Uint8Array([107, 0, 2, 0])); 
+                
+                // B. Press V while holding Ctrl
+                sendEncrypted(keyChar, new Uint8Array([107, 118, 2, 0])); 
+                
+                // C. Release both shortly after
+                setTimeout(() => {
+                    sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
+                }, 40);
+                
                 lastVTime = 0;
-            }, 500);
+            }, PASTE_DETECTION_DELAY);
         }
         return;
     }
 
-    // 2. Modifiers bitmask
+    // --- 2. Modifiers bitmask ---
     let mod = 0;
     if (e.shiftKey) mod |= 1;
     if (e.ctrlKey) mod |= 2;
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
-    // 3. OS-LEVEL INTERRUPT REMAPS
+    // --- 3. OS-LEVEL INTERRUPT REMAPS ---
     if (e.ctrlKey && e.key === "`") {
         e.preventDefault();
         sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96])); 
@@ -202,7 +214,7 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 4. ESCAPE LOGIC (3x ` -> ESC)
+    // --- 4. ESCAPE LOGIC (3x ` -> ESC) ---
     if (e.key === "`") {
         e.preventDefault();
         tickCount++;
@@ -222,15 +234,15 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // 5. SHORTCUTS (Ctrl/Cmd + Key) -> Arduino Mode 3 (Ctrl) or 4 (Meta)
+    // --- 5. SHORTCUTS (Ctrl/Cmd + Key) ---
     if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
-        const mode = e.metaKey ? 4 : 3;
+        const mode = e.metaKey ? 4 : 3; // 3=Ctrl, 4=Meta
         const charCode = e.key.toLowerCase().charCodeAt(0);
         sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
         return;
     }
 
-    // 6. NAVIGATION & FUNCTION KEYS (Mode 1)
+    // --- 6. NAVIGATION & FUNCTION KEYS (Mode 1) ---
     const nav = {
         Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowLeft: 37, ArrowUp: 38,
         ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
@@ -244,7 +256,7 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // 7. PLAIN TYPING
+    // --- 7. PLAIN TYPING ---
     if (e.key.length === 1) {
         sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
     }
