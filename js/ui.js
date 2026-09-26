@@ -213,33 +213,39 @@ async function loadGitHubFiles() {
 
 // --- OTA Update Trigger ---
 document.getElementById("updateBtn").onclick = async () => {
-    if (!selectedFileArray || !otaChar) return;
-    
+    if (!selectedFileArray || !otaChar || !aesKeyParsed) return;
+
     const pBar = document.getElementById("pBar");
     const pFill = document.getElementById("pFill");
     pBar.style.display = "block";
-    
-    // Start Message: 'B' + Size (4 bytes)
-    const beginMsg = new Uint8Array(5);
-    beginMsg[0] = 66; 
-    new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
-    await otaChar.writeValue(beginMsg);
 
-    // Chunk Data: 'D' + 128 bytes
-    for (let i = 0; i < selectedFileArray.length; i += 128) {
-        const chunk = selectedFileArray.slice(i, i + 128);
-        const dataMsg = new Uint8Array(chunk.length + 1);
-        dataMsg[0] = 68; 
-        dataMsg.set(chunk, 1);
-        
-        await otaChar.writeValue(dataMsg);
-        
-        let pct = Math.round((i / selectedFileArray.length) * 100);
-        pFill.style.width = pct + "%";
-        document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
+    // Every OTA message is encrypted with the same key as HID traffic
+    try {
+        // Start Message: 'B' + Size (4 bytes)
+        const beginMsg = new Uint8Array(5);
+        beginMsg[0] = 66;
+        new DataView(beginMsg.buffer).setUint32(1, selectedFileArray.length, true);
+        await otaChar.writeValue(encryptPacket(beginMsg));
+
+        // Chunk Data: 'D' + 128 bytes
+        for (let i = 0; i < selectedFileArray.length; i += 128) {
+            const chunk = selectedFileArray.slice(i, i + 128);
+            const dataMsg = new Uint8Array(chunk.length + 1);
+            dataMsg[0] = 68;
+            dataMsg.set(chunk, 1);
+
+            await otaChar.writeValue(encryptPacket(dataMsg));
+
+            let pct = Math.round((i / selectedFileArray.length) * 100);
+            pFill.style.width = pct + "%";
+            document.getElementById("otaStatus").innerText = `Updating: ${pct}%`;
+        }
+
+        // End Message: 'E'
+        await otaChar.writeValue(encryptPacket(new Uint8Array([69])));
+        document.getElementById("otaStatus").innerText = "Success! Rebooting...";
+    } catch (e) {
+        console.error("OTA Error:", e);
+        document.getElementById("otaStatus").innerText = "Update failed: " + e.message;
     }
-    
-    // End Message: 'E'
-    await otaChar.writeValue(new Uint8Array([69])); 
-    document.getElementById("otaStatus").innerText = "Success! Rebooting...";
 };

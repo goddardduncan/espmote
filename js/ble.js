@@ -7,8 +7,8 @@ const UUIDS = {
 
 let mouseChar, keyChar, otaChar, aesKeyParsed;
 
-async function sendEncrypted(characteristic, dataArray) {
-    if (!characteristic || !aesKeyParsed) return;
+// Returns [IV(16)][AES-CBC ciphertext] for the given plaintext bytes
+function encryptPacket(dataArray) {
     const randomIV = CryptoJS.lib.WordArray.random(16);
     const wordArray = CryptoJS.lib.WordArray.create(dataArray);
     const encrypted = CryptoJS.AES.encrypt(wordArray, aesKeyParsed, {
@@ -23,9 +23,13 @@ async function sendEncrypted(characteristic, dataArray) {
     const combined = new Uint8Array(ivBytes.length + cipherBytes.length);
     combined.set(ivBytes);
     combined.set(cipherBytes, ivBytes.length);
+    return combined;
+}
 
+async function sendEncrypted(characteristic, dataArray) {
+    if (!characteristic || !aesKeyParsed) return;
     try {
-        await characteristic.writeValueWithoutResponse(combined);
+        await characteristic.writeValueWithoutResponse(encryptPacket(dataArray));
     } catch (e) {
         console.error("Transmission Error:", e);
     }

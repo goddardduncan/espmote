@@ -26,6 +26,19 @@ const SHIFT_REQUIRED = {
     ">": ".", "?": "/"
 };
 
+// Physical key -> unshifted US character, so held modifiers can't alter what we send
+const CODE_TO_CHAR = {
+    Backquote: "`", Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]",
+    Backslash: "\\", Semicolon: ";", Quote: "'", Comma: ",", Period: ".",
+    Slash: "/", Space: " "
+};
+
+const baseCharFromCode = (code) => {
+    if (/^Key[A-Z]$/.test(code)) return code[3].toLowerCase();
+    if (/^Digit[0-9]$/.test(code)) return code[5];
+    return CODE_TO_CHAR[code];
+};
+
 // Acceleration helper
 const accelCurve = (speed) =>
     1 + 1 / (1 + Math.exp(-TRACKPAD.curveSharpness * (speed - TRACKPAD.curveMid)));
@@ -213,8 +226,7 @@ document.addEventListener("keydown", (e) => {
         }
 
         const timeout = setTimeout(() => {
-            const mode = e.metaKey ? 4 : 3;
-            sendEncrypted(keyChar, new Uint8Array([107, 128, mode, 118]));
+            sendEncrypted(keyChar, new Uint8Array([107, 118, 0, e.metaKey ? 8 : 2]));
             ctrlVState = null;
         }, DOUBLE_TAP_DELAY);
 
@@ -229,16 +241,18 @@ document.addEventListener("keydown", (e) => {
     if (e.altKey) mod |= 4;
     if (e.metaKey) mod |= 8;
 
-    // --- OS INTERRUPT REMAPS ---
-    if (e.ctrlKey && e.key === "`") {
+    // --- OS INTERRUPT REMAPS (Ctrl stands in for Cmd, other modifiers kept) ---
+    const cmdMod = (mod & ~2) | 8;
+
+    if (e.ctrlKey && e.code === "Backquote") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 96]));
+        sendEncrypted(keyChar, new Uint8Array([107, 96, 0, cmdMod]));
         return;
     }
 
     if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 128, 4, 9]));
+        sendEncrypted(keyChar, new Uint8Array([107, 9, 1, cmdMod]));
         return;
     }
 
@@ -263,11 +277,10 @@ document.addEventListener("keydown", (e) => {
 
     e.preventDefault();
 
-    // Shortcuts (Ctrl/Cmd + key)
-    if ((e.ctrlKey || e.metaKey) && e.key.length === 1) {
-        const mode = e.metaKey ? 4 : 3;
-        const charCode = e.key.toLowerCase().charCodeAt(0);
-        sendEncrypted(keyChar, new Uint8Array([107, 128, mode, charCode]));
+    // Shortcuts (Ctrl/Alt/Cmd + key): physical key plus every held modifier
+    const baseChar = baseCharFromCode(e.code);
+    if ((e.ctrlKey || e.altKey || e.metaKey) && baseChar) {
+        sendEncrypted(keyChar, new Uint8Array([107, baseChar.charCodeAt(0), 0, mod]));
         return;
     }
 
