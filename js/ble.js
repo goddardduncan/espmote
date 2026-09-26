@@ -6,6 +6,12 @@ const UUIDS = {
 };
 
 let mouseChar, keyChar, otaChar, aesKeyParsed;
+let keyQueue = Promise.resolve();
+
+// Keyboard packets are chained so key-down/up can't overlap or arrive out of order
+function sendKey(dataArray) {
+    keyQueue = keyQueue.then(() => sendEncrypted(keyChar, dataArray));
+}
 
 // Returns [IV(16)][AES-CBC ciphertext] for the given plaintext bytes
 function encryptPacket(dataArray) {

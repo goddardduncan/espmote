@@ -1,5 +1,8 @@
 const REPO_API_URL = "https://api.github.com/repos/goddardduncan/espmote/contents/firmware";
+const RECONNECT_ATTEMPTS = 5;
 let hasAttemptedConnection = false;
+let bleDevice = null;
+let reconnecting = false;
 let selectedFileArray = null;
 
 function loadSettingsFromStorage() {
@@ -64,25 +67,16 @@ function initUIListeners() {
             });
 
             document.getElementById("status").innerText = "Connecting...";
-            const server = await device.gatt.connect();
-            const service = await server.getPrimaryService(UUIDS.SERVICE);
-            
-            // Assign global characteristics defined in ble.js
-            mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
-            keyChar = await service.getCharacteristic(UUIDS.KEY);
-            otaChar = await service.getCharacteristic(UUIDS.OTA);
+            bleDevice = device;
+            device.ongattserverdisconnected = reconnect;
+            await connectGatt(device);
 
             document.getElementById("status").innerText = "Connected";
             document.getElementById("connectBtn").style.display = "none";
             document.getElementById("ota-panel").style.display = "block";
-            
-            hasAttemptedConnection = true;
-            loadGitHubFiles();
 
-            device.addEventListener("gattserverdisconnected", () => {
-                document.getElementById("status").innerText = "Disconnected. Reloading...";
-                setTimeout(() => location.reload(), 1500);
-            });
+            if (!hasAttemptedConnection) loadGitHubFiles();
+            hasAttemptedConnection = true;
 
         } catch (e) {
             console.error(e);
@@ -169,6 +163,42 @@ function initUIListeners() {
     };
 
     document.getElementById("resetBtn").onclick = resetApp;
+}
+
+async function connectGatt(device) {
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(UUIDS.SERVICE);
+
+    // Assign global characteristics defined in ble.js
+    mouseChar = await service.getCharacteristic(UUIDS.MOUSE);
+    keyChar = await service.getCharacteristic(UUIDS.KEY);
+    otaChar = await service.getCharacteristic(UUIDS.OTA);
+}
+
+// Reconnect to the same device without the chooser (also picks the board back up after an OTA reboot)
+async function reconnect() {
+    if (reconnecting) return;
+    reconnecting = true;
+    mouseChar = keyChar = otaChar = null;
+    releaseAll(); // the firmware has already released everything on its side
+
+    const status = document.getElementById("status");
+    for (let attempt = 1; attempt <= RECONNECT_ATTEMPTS; attempt++) {
+        status.innerText = `Reconnecting (${attempt}/${RECONNECT_ATTEMPTS})...`;
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+        try {
+            await connectGatt(bleDevice);
+            status.innerText = "Connected";
+            reconnecting = false;
+            return;
+        } catch (e) {
+            console.warn("Reconnect failed:", e);
+        }
+    }
+
+    reconnecting = false;
+    status.innerText = "Disconnected";
+    document.getElementById("connectBtn").style.display = "inline-block";
 }
 
 function updateActiveKey() {

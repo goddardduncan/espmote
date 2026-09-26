@@ -11,7 +11,7 @@ let tickCount = 0, tickTime;
 // Burst Paste State
 let ctrlVState = null; // { time, timeout }
 const DOUBLE_TAP_DELAY = 500;
-const BURST_DELAY = 75; // HID stability
+const BURST_DELAY = 30; // HID stability (firmware queues packets, so this can be short)
 
 // Constants for behavior
 const TRACKPAD = { smoothing: 0.65, deadzone: 0.15, curveMid: 0.08, curveSharpness: 10 };
@@ -26,18 +26,37 @@ const SHIFT_REQUIRED = {
     ">": ".", "?": "/"
 };
 
-// Physical key -> unshifted US character, so held modifiers can't alter what we send
-const CODE_TO_CHAR = {
-    Backquote: "`", Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]",
-    Backslash: "\\", Semicolon: ";", Quote: "'", Comma: ",", Period: ".",
-    Slash: "/", Space: " "
-};
+// Physical key (KeyboardEvent.code) -> USB HID usage ID
+const HID_USAGE = (() => {
+    const map = {
+        Enter: 0x28, Escape: 0x29, Backspace: 0x2A, Tab: 0x2B, Space: 0x2C,
+        Minus: 0x2D, Equal: 0x2E, BracketLeft: 0x2F, BracketRight: 0x30, Backslash: 0x31,
+        Semicolon: 0x33, Quote: 0x34, Backquote: 0x35, Comma: 0x36, Period: 0x37, Slash: 0x38,
+        CapsLock: 0x39, PrintScreen: 0x46, ScrollLock: 0x47, Pause: 0x48,
+        Insert: 0x49, Home: 0x4A, PageUp: 0x4B, Delete: 0x4C, End: 0x4D, PageDown: 0x4E,
+        ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
+        NumLock: 0x53, NumpadDivide: 0x54, NumpadMultiply: 0x55, NumpadSubtract: 0x56,
+        NumpadAdd: 0x57, NumpadEnter: 0x58, NumpadDecimal: 0x63, IntlBackslash: 0x64,
+        ContextMenu: 0x65, NumpadEqual: 0x67,
+        ControlLeft: 0xE0, ShiftLeft: 0xE1, AltLeft: 0xE2, MetaLeft: 0xE3,
+        ControlRight: 0xE4, ShiftRight: 0xE5, AltRight: 0xE6, MetaRight: 0xE7,
+    };
+    for (let i = 0; i < 26; i++) map["Key" + String.fromCharCode(65 + i)] = 0x04 + i;
+    for (let i = 1; i <= 9; i++) map["Digit" + i] = 0x1E + i - 1;
+    map.Digit0 = 0x27;
+    for (let i = 1; i <= 9; i++) map["Numpad" + i] = 0x59 + i - 1;
+    map.Numpad0 = 0x62;
+    for (let i = 1; i <= 12; i++) map["F" + i] = 0x3A + i - 1;
+    for (let i = 13; i <= 24; i++) map["F" + i] = 0x68 + i - 13;
+    return map;
+})();
 
-const baseCharFromCode = (code) => {
-    if (/^Key[A-Z]$/.test(code)) return code[3].toLowerCase();
-    if (/^Digit[0-9]$/.test(code)) return code[5];
-    return CODE_TO_CHAR[code];
-};
+const isModifier = (usage) => usage >= 0xE0;
+
+// Keyboard state mirrored on the target
+const heldKeys = new Set(); // HID usages currently held down on the target
+let ctrlAsCmd = false;      // Ctrl is being forwarded as Cmd (window switching)
+let capsSent = false;       // CapsLock state last sent to the target
 
 // Acceleration helper
 const accelCurve = (speed) =>
@@ -63,6 +82,9 @@ async function burstClipboard() {
         const statusEl = document.getElementById("status");
         const originalStatus = statusEl ? statusEl.innerText : "Connected";
 
+        // Drop the held Ctrl/Cmd so pasted characters aren't sent as shortcuts
+        releaseAll();
+
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
 
@@ -71,9 +93,9 @@ async function burstClipboard() {
 
             // Handle newline
             if (char === "\n") {
-                sendEncrypted(keyChar, new Uint8Array([107, 13, 1, 1]));
+                sendKey(new Uint8Array([107, 13, 1, 1]));
                 await new Promise(r => setTimeout(r, 40));
-                sendEncrypted(keyChar, new Uint8Array([107, 0, 0, 0]));
+                sendKey(new Uint8Array([107, 0, 0, 0]));
                 await new Promise(r => setTimeout(r, 20));
                 await new Promise(r => setTimeout(r, BURST_DELAY));
                 continue;
@@ -92,7 +114,7 @@ async function burstClipboard() {
 
             const charCode = baseChar.charCodeAt(0);
 
-            sendEncrypted(keyChar, new Uint8Array([107, charCode, 0, mod]));
+            sendKey(new Uint8Array([107, charCode, 0, mod]));
             await new Promise(r => setTimeout(r, BURST_DELAY));
         }
 
@@ -202,9 +224,63 @@ document.addEventListener("wheel", (e) => {
 // ================= KEYBOARD ==========================
 // =====================================================
 
+// Keys are forwarded as real down/up events so modifiers stay held
+// (Shift-click, Ctrl-click, Alt-drag) and the target does its own auto-repeat.
+
+const keyDown = (usage) => {
+    heldKeys.add(usage);
+    sendKey(new Uint8Array([100, usage]));
+};
+
+const keyUp = (usage) => {
+    heldKeys.delete(usage);
+    sendKey(new Uint8Array([117, usage]));
+};
+
+// Press and release a key, briefly holding any of `mods` the target doesn't already have down
+function tapKey(usage, mods = []) {
+    const added = mods.filter(m => !heldKeys.has(m));
+    added.forEach(keyDown);
+    sendKey(new Uint8Array([100, usage]));
+    sendKey(new Uint8Array([117, usage]));
+    added.forEach(keyUp);
+}
+
+// Release every key and mouse button on the target and forget pending key tricks
+function releaseAll() {
+    heldKeys.clear();
+    ctrlAsCmd = false;
+    tickCount = 0;
+    clearTimeout(tickTime);
+    if (ctrlVState) {
+        clearTimeout(ctrlVState.timeout);
+        ctrlVState = null;
+    }
+    sendKey(new Uint8Array([114]));
+}
+
+// macOS fires keydown only when CapsLock turns on and keyup only when it turns off,
+// so tap it on the target whenever the controller's lock state changes
+function syncCapsLock(e) {
+    const on = e.getModifierState("CapsLock");
+    if (on !== capsSent) {
+        tapKey(HID_USAGE.CapsLock);
+        capsSent = on;
+    }
+}
+
 document.addEventListener("keydown", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card || !keyChar) return;
+    e.preventDefault();
+
+    if (e.code === "CapsLock") return syncCapsLock(e);
+
+    const usage = HID_USAGE[e.code];
+    if (!usage) return;
+
+    // Modifiers captured now, for keys that are sent after a delay
+    const heldMods = [...heldKeys].filter(isModifier);
 
     // ================= CTRL/CMD + V =================
 
@@ -212,10 +288,10 @@ document.addEventListener("keydown", (e) => {
         (e.ctrlKey || e.metaKey) &&
         !e.shiftKey &&
         !e.altKey &&
-        e.key.toLowerCase() === "v";
+        e.code === "KeyV";
 
     if (isPasteCombo) {
-        e.preventDefault();
+        if (e.repeat) return;
         const now = performance.now();
 
         if (ctrlVState && (now - ctrlVState.time < DOUBLE_TAP_DELAY)) {
@@ -226,7 +302,7 @@ document.addEventListener("keydown", (e) => {
         }
 
         const timeout = setTimeout(() => {
-            sendEncrypted(keyChar, new Uint8Array([107, 118, 0, e.metaKey ? 8 : 2]));
+            tapKey(usage, heldMods);
             ctrlVState = null;
         }, DOUBLE_TAP_DELAY);
 
@@ -234,75 +310,77 @@ document.addEventListener("keydown", (e) => {
         return;
     }
 
-    // Modifiers
-    let mod = 0;
-    if (e.shiftKey) mod |= 1;
-    if (e.ctrlKey) mod |= 2;
-    if (e.altKey) mod |= 4;
-    if (e.metaKey) mod |= 8;
-
-    // --- OS INTERRUPT REMAPS (Ctrl stands in for Cmd, other modifiers kept) ---
-    const cmdMod = (mod & ~2) | 8;
-
-    if (e.ctrlKey && e.code === "Backquote") {
-        e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 96, 0, cmdMod]));
-        return;
-    }
-
-    if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        sendEncrypted(keyChar, new Uint8Array([107, 9, 1, cmdMod]));
+    // --- OS INTERRUPT REMAPS ---
+    // The controller OS grabs Cmd+` / Cmd+Tab, so Ctrl stands in for Cmd.
+    // Cmd stays held on the target until Ctrl is released, keeping the switcher open.
+    if (e.ctrlKey && (e.code === "Backquote" || e.code === "Tab")) {
+        if (!ctrlAsCmd) {
+            [HID_USAGE.ControlLeft, HID_USAGE.ControlRight].filter(u => heldKeys.has(u)).forEach(keyUp);
+            keyDown(HID_USAGE.MetaLeft);
+            ctrlAsCmd = true;
+        }
+        tapKey(usage);
         return;
     }
 
     // --- ESCAPE LOGIC (3x ` -> ESC) ---
-    if (e.key === "`") {
-        e.preventDefault();
+    if (e.code === "Backquote") {
+        if (e.repeat) return;
         tickCount++;
         clearTimeout(tickTime);
 
         if (tickCount === 3) {
-            sendEncrypted(keyChar, new Uint8Array([107, 27, 1, 0]));
+            tapKey(HID_USAGE.Escape);
             tickCount = 0;
         } else {
             tickTime = setTimeout(() => {
-                if (tickCount === 1)
-                    sendEncrypted(keyChar, new Uint8Array([107, 96, 0, mod]));
+                if (tickCount === 1) tapKey(usage, heldMods);
                 tickCount = 0;
             }, 500);
         }
         return;
     }
 
+    if (isModifier(usage)) {
+        if (!heldKeys.has(usage)) keyDown(usage);
+        return;
+    }
+
+    // macOS never fires keyup for keys released while Cmd is held, so tap instead of hold
+    // (browser repeats still come through as repeated taps)
+    if (e.metaKey) {
+        tapKey(usage);
+        return;
+    }
+
+    if (!heldKeys.has(usage)) keyDown(usage);
+});
+
+document.addEventListener("keyup", (e) => {
+    const card = document.getElementById("trackpad-card");
+    if (document.pointerLockElement !== card || !keyChar) return;
     e.preventDefault();
 
-    // Shortcuts (Ctrl/Alt/Cmd + key): physical key plus every held modifier
-    const baseChar = baseCharFromCode(e.code);
-    if ((e.ctrlKey || e.altKey || e.metaKey) && baseChar) {
-        sendEncrypted(keyChar, new Uint8Array([107, baseChar.charCodeAt(0), 0, mod]));
+    if (e.code === "CapsLock") return syncCapsLock(e);
+
+    if (ctrlAsCmd && (e.code === "ControlLeft" || e.code === "ControlRight")) {
+        keyUp(HID_USAGE.MetaLeft);
+        ctrlAsCmd = false;
         return;
     }
 
-    // Navigation
-    const nav = {
-        Backspace: 8, Tab: 9, Enter: 13, Escape: 27,
-        ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
-        Insert: 45, Delete: 46,
-        Home: 36, End: 35, PageUp: 33, PageDown: 34,
-        F1: 112, F2: 113, F3: 114, F4: 115, F5: 116,
-        F6: 117, F7: 118, F8: 119, F9: 120,
-        F10: 121, F11: 122, F12: 123
-    };
+    // Keys released while Cmd was down never reported keyup on macOS
+    if (e.code === "MetaLeft" || e.code === "MetaRight")
+        [...heldKeys].filter(u => !isModifier(u)).forEach(keyUp);
 
-    if (nav[e.key]) {
-        sendEncrypted(keyChar, new Uint8Array([107, nav[e.key], 1, mod]));
-        return;
-    }
+    const usage = HID_USAGE[e.code];
+    if (heldKeys.has(usage)) keyUp(usage);
+});
 
-    // Plain typing
-    if (e.key.length === 1)
-        sendEncrypted(keyChar, new Uint8Array([107, e.key.charCodeAt(0), 0, mod]));
+// Losing pointer lock (Esc, switching app/tab) means we'll miss the releases, so drop everything
+document.addEventListener("pointerlockchange", () => {
+    if (document.pointerLockElement !== document.getElementById("trackpad-card"))
+        releaseAll();
 });
 
 
