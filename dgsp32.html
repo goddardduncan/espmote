@@ -92,8 +92,11 @@ a.brand:active{transform:scale(.97)}
 // host it just works. If LNA is unavailable/denied, the probe quietly fails and
 // this stays the badge launcher.
 (() => {
-  const DONGLE = 'http://dgsp32.local/';
-  const PROBE  = 'http://dgsp32.local/';   // any endpoint; we only need it to connect
+  // Use the dongle's fixed hotspot IP, not dgsp32.local: Chrome resolves .local
+  // via mDNS for fetch (so a hostname probe works) but NOT for a top-level
+  // navigation, which NXDOMAINs. The literal IP needs no resolution either way.
+  const DONGLE = 'http://192.168.7.1/';
+  const PROBE  = 'http://192.168.7.1/';   // any endpoint; we only need it to connect
   const wrap = document.getElementById('wrap');
   const hint = document.getElementById('hint');
   const hintText = document.getElementById('hintText');
