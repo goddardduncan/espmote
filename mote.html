@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>moteMote | Remote</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h2 style="margin: 0">moteMote</h2>
+        <div id="status">Ready to connect</div>
+    </div>
+
+    <div class="key-container" id="keyWrapper">
+        <input type="password" id="aesKey" placeholder="16-character USBkey" maxlength="16" />
+        <span class="toggle-pass" id="togglePass">👁️</span>
+    </div>
+
+    <div id="button-cluster" class="flex-center" style="gap: 10px">
+        <button id="connectBtn" class="btn">Connect Bluetooth</button>
+        <button id="changeKeyBtn" class="btn" style="display: none; background: #f4b400">Update Key</button>
+        <button id="confirmBtn" class="btn">Confirm & Save Key</button>
+    </div>
+
+    <div id="trackpad-card">
+        <div id="instr">Tap to control device</div>
+        <ul class="shortcut-hint">
+            <li>Tap <span class="key-cap">`</span> 3x for <span class="key-cap">ESC</span></li>
+            <li>Tap <span class="key-cap">Ctrl</span> + <span class="key-cap">`</span> to switch window</li>
+<li><span class="key-cap">Ctrl</span> + <span class="key-cap">V</span>, <span class="key-cap">V</span> (double-tap) to burst Paste host clipboard</span></li>
+        </ul>
+    </div>
+
+    <div class="controls-wrapper">
+        <div class="sensitivity-container">
+            <label for="sensSlider">Mouse sensitivity</label>
+            <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0" />
+            <span id="sensValue">2.0</span>
+        </div>
+        <div class="sensitivity-container">
+            <label>Scroll decay</label>
+            <input type="range" id="scrollDecay" min="0.90" max="0.99" step="0.005" value="0.95" />
+            <span id="scrollDecayVal">0.95</span>
+        </div>
+        <div class="sensitivity-container">
+            <label>Scroll precision</label>
+            <input type="range" id="scrollBoost" min="1.0" max="2.5" step="0.1" value="1.4" />
+            <span id="scrollBoostVal">1.4</span>
+        </div>
+    </div>
+
+    <div id="ota-panel">
+        <span class="ota-toggle" id="otaToggle">Developer: Update Firmware</span>
+        <div id="ota-controls">
+            <div id="fileList">Loading GitHub firmware...</div>
+            <div class="progress-bar" id="pBar">
+                <div class="progress-fill" id="pFill"></div>
+            </div>
+            <button id="updateBtn" class="btn btn-ota" disabled>Flash Selected Build</button>
+            <div id="otaStatus">Select version</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span class="reset-link" id="resetBtn">Reset PassKey</span>
+    </div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/ble.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/ui.js"></script>
+</body>
+</html>
