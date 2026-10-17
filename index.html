@@ -1,75 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>moteMote | Remote</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-</head>
-<body>
-    <div class="header">
-        <h2 style="margin: 0">moteMote</h2>
-        <div id="status">Ready to connect</div>
-    </div>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>mote</title>
+<meta name="description" content="Opens your dgsp32 dongle when it's nearby, otherwise the mote keyboard.">
+<style>
+:root{
+  --bg:#f4f4f3; --fg:#18181b; --mut:#8a8a93; --line:#e4e4e7;
+  --accent:#16a34a; --accent2:#4ade80; --card:#ffffff;
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0b0b0d; --fg:#f4f4f5; --mut:#8b8b93; --line:#242427; --card:#141417;}
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:flex; align-items:center; justify-content:center;
+  padding:24px 16px; text-align:center; -webkit-tap-highlight-color:transparent;
+}
+.wrap{display:flex; flex-direction:column; align-items:center; gap:22px; max-width:340px}
 
-    <div class="key-container" id="keyWrapper">
-        <input type="password" id="aesKey" placeholder="16-character USBkey" maxlength="16" />
-        <span class="toggle-pass" id="togglePass">👁️</span>
-    </div>
+/* The made-this badge (matched to growcube.p4s.space): a white rounded frame
+   wrapping a black pill with white 700 text. The whole thing is the link. */
+.made-this{
+  display:inline-block; padding:4px; background:#fff; border-radius:16px;
+  text-decoration:none; transition:transform .15s ease;
+  box-shadow:0 1px 2px rgba(0,0,0,.18), 0 6px 20px rgba(0,0,0,.18);
+}
+.made-this:hover{transform:translateY(-1px)}
+.made-this:active{transform:scale(.98)}
+.made-this span{
+  display:block; background:#111; color:#fff; border-radius:12px;
+  padding:14px 22px 16px; letter-spacing:-.02em;
+  font:800 30px/1 "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+.tag{font-size:14px; color:var(--mut)}
 
-    <div id="button-cluster" class="flex-center" style="gap: 10px">
-        <button id="connectBtn" class="btn">Connect Bluetooth</button>
-        <button id="changeKeyBtn" class="btn" style="display: none; background: #f4b400">Update Key</button>
-        <button id="confirmBtn" class="btn">Confirm & Save Key</button>
-    </div>
+.hint{font-size:13px; color:var(--mut); display:flex; align-items:center; gap:8px}
+.dot{width:8px; height:8px; border-radius:50%; background:var(--accent)}
+.searching .dot{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25; transform:scale(.8)}50%{opacity:1; transform:scale(1.25)}}
+</style>
 
-    <div id="trackpad-card">
-        <div id="instr">Tap to control device</div>
-        <ul class="shortcut-hint">
-            <li>Tap <span class="key-cap">`</span> 3x for <span class="key-cap">ESC</span></li>
-            <li>Tap <span class="key-cap">Ctrl</span> + <span class="key-cap">`</span> to switch window</li>
-<li><span class="key-cap">Ctrl</span> + <span class="key-cap">V</span>, <span class="key-cap">V</span> (double-tap) to burst Paste host clipboard</span></li>
-        </ul>
-    </div>
+<div class="wrap searching" id="wrap">
+  <a class="made-this" href="https://mote.dunc.app/mote.html" id="brand" aria-label="Open the mote keyboard"><span>mote-mote</span></a>
+  <div class="tag">tap to open the keyboard</div>
 
-    <div class="controls-wrapper">
-        <div class="sensitivity-container">
-            <label for="sensSlider">Mouse sensitivity</label>
-            <input type="range" id="sensSlider" min="1" max="3" step="0.1" value="2.0" />
-            <span id="sensValue">2.0</span>
-        </div>
-        <div class="sensitivity-container">
-            <label>Scroll decay</label>
-            <input type="range" id="scrollDecay" min="0.90" max="0.99" step="0.005" value="0.95" />
-            <span id="scrollDecayVal">0.95</span>
-        </div>
-        <div class="sensitivity-container">
-            <label>Scroll precision</label>
-            <input type="range" id="scrollBoost" min="1.0" max="2.5" step="0.1" value="1.4" />
-            <span id="scrollBoostVal">1.4</span>
-        </div>
-    </div>
+  <div class="hint" id="hint"><span class="dot"></span><span id="hintText">looking for your dongle…</span></div>
+</div>
 
-    <div id="ota-panel">
-        <span class="ota-toggle" id="otaToggle">Developer: Update Firmware</span>
-        <div id="ota-controls">
-            <div id="fileList">Loading GitHub firmware...</div>
-            <div class="progress-bar" id="pBar">
-                <div class="progress-fill" id="pFill"></div>
-            </div>
-            <button id="updateBtn" class="btn btn-ota" disabled>Flash Selected Build</button>
-            <div id="otaStatus">Select version</div>
-        </div>
-    </div>
+<script>
+// If the dgsp32 dongle is reachable on this network, jump straight to its page.
+// Otherwise this stays a launcher: the badge opens the mote keyboard app.
+//
+// HOSTING: the dongle's hotspot is a private 192.168 address, so Chrome's Local
+// Network Access lets even an HTTPS page reach it over HTTP - the FIRST probe
+// pops a one-time "allow access to devices on your local network" prompt; click
+// Allow and detection runs (the choice is remembered per site). On a plain HTTP
+// host it just works. If LNA is unavailable/denied, the probe quietly fails and
+// this stays the badge launcher.
+(() => {
+  // PROBE by hostname, REDIRECT by IP - on purpose:
+  //  - dgsp32.local only resolves via mDNS on the actual hotspot (a VPN like
+  //    Tailscale doesn't touch .local), so off the hotspot the probe fails
+  //    cleanly instead of being hijacked by a captured 192.168.x route.
+  //  - but Chrome won't mDNS-resolve a top-level navigation (it NXDOMAINs), so
+  //    we navigate to the literal IP, which the direct hotspot route reaches.
+  const PROBE  = 'http://dgsp32.local/stats';
+  const DONGLE = 'http://192.168.7.1/';
+  const wrap = document.getElementById('wrap');
+  const hint = document.getElementById('hint');
+  const hintText = document.getElementById('hintText');
 
-    <div class="footer">
-        <span class="reset-link" id="resetBtn">Reset PassKey</span>
-    </div>
+  let stopped = false;
 
-    <script src="js/storage.js"></script>
-    <script src="js/ble.js"></script>
-    <script src="js/input.js"></script>
-    <script src="js/ui.js"></script>
-</body>
+  // One probe: true ONLY if we can read /stats AND it looks like our dongle.
+  // Reading the JSON (not an opaque no-cors response) means a VPN filter or any
+  // other host that happens to answer can't fool us - only the real dongle
+  // returns this shape with the CORS header that lets us read it.
+  async function probe() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    try {
+      const res = await fetch(PROBE, {cache: 'no-store', signal: ctrl.signal});
+      clearTimeout(timer);
+      const data = await res.json();
+      return data && typeof data.up_ms === 'number'; // our dongle's /stats shape
+    } catch (e) {
+      clearTimeout(timer);
+      return false;
+    }
+  }
+
+  async function loop() {
+    while (!stopped) {
+      if (await probe()) {
+        hintText.textContent = 'found it — opening…';
+        location.href = DONGLE;
+        return;
+      }
+      await new Promise(r => setTimeout(r, 2500)); // try again shortly
+    }
+  }
+  loop();
+
+  // Stop probing when the tab is hidden; resume when it returns.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { stopped = true; }
+    else if (stopped) { stopped = false; loop(); }
+  });
+})();
+</script>
 </html>
