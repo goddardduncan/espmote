@@ -40,3 +40,57 @@ async function sendEncrypted(characteristic, dataArray) {
         console.error("Transmission Error:", e);
     }
 }
+
+// Mouse packets: motion and scroll are summed while a write is in flight, so the
+// board always gets the latest movement in one packet instead of working through a backlog
+const mouseQueue = []; // discrete packets (button presses), sent in order before any motion
+let pendingX = 0, pendingY = 0, pendingWheel = 0, mouseBusy = false;
+
+const clamp8 = (v) => Math.max(-127, Math.min(127, v));
+
+function takeMove() {
+    const x = clamp8(pendingX), y = clamp8(pendingY);
+    pendingX -= x;
+    pendingY -= y;
+    return new Int8Array([109, x, y]);
+}
+
+function takeWheel() {
+    const w = clamp8(pendingWheel);
+    pendingWheel -= w;
+    return new Int8Array([115, w]);
+}
+
+function nextMousePacket() {
+    if (mouseQueue.length) return mouseQueue.shift();
+    if (pendingX || pendingY) return takeMove();
+    if (pendingWheel) return takeWheel();
+    return null;
+}
+
+async function pumpMouse() {
+    if (mouseBusy) return;
+    mouseBusy = true;
+    let packet;
+    while ((packet = nextMousePacket())) await sendEncrypted(mouseChar, packet);
+    mouseBusy = false;
+}
+
+function addMotion(dx, dy) {
+    pendingX += dx;
+    pendingY += dy;
+    pumpMouse();
+}
+
+function addWheel(steps) {
+    pendingWheel += steps;
+    pumpMouse();
+}
+
+// Button packets go after the motion that came before them, so drags start and end in the right place
+function queueMouse(packet) {
+    while (pendingX || pendingY) mouseQueue.push(takeMove());
+    while (pendingWheel) mouseQueue.push(takeWheel());
+    mouseQueue.push(packet);
+    pumpMouse();
+}
