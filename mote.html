@@ -4,12 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>moteMote | Remote</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&display=swap">
+    <link rel="stylesheet" href="made-this.css">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
 <body>
     <div class="header">
-        <h2 style="margin: 0">moteMote</h2>
+        <h1>moteMote</h1>
         <div id="status">Ready to connect</div>
     </div>
 
@@ -20,7 +22,7 @@
 
     <div id="button-cluster" class="flex-center" style="gap: 10px">
         <button id="connectBtn" class="btn">Connect Bluetooth</button>
-        <button id="changeKeyBtn" class="btn" style="display: none; background: #f4b400">Update Key</button>
+        <button id="changeKeyBtn" class="btn is-quiet" style="display: none">Update Key</button>
         <button id="confirmBtn" class="btn">Confirm & Save Key</button>
     </div>
 
@@ -29,7 +31,7 @@
         <ul class="shortcut-hint">
             <li>Tap <span class="key-cap">`</span> 3x for <span class="key-cap">ESC</span></li>
             <li>Tap <span class="key-cap">Ctrl</span> + <span class="key-cap">`</span> to switch window</li>
-<li><span class="key-cap">Ctrl</span> + <span class="key-cap">V</span>, <span class="key-cap">V</span> (double-tap) to burst Paste host clipboard</span></li>
+<li><span class="key-cap">Ctrl</span> + <span class="key-cap">V</span>, <span class="key-cap">V</span> (double-tap) to burst paste host clipboard</li>
         </ul>
     </div>
 
@@ -49,6 +51,10 @@
             <input type="range" id="scrollBoost" min="1.0" max="2.5" step="0.1" value="1.4" />
             <span id="scrollBoostVal">1.4</span>
         </div>
+        <label class="sensitivity-container toggle-row" for="invertMouse">
+            <span>Invert mouse</span>
+            <input type="checkbox" id="invertMouse" role="switch" />
+        </label>
     </div>
 
     <div id="ota-panel">
@@ -66,6 +72,8 @@
     <div class="footer">
         <span class="reset-link" id="resetBtn">Reset PassKey</span>
     </div>
+
+    <a class="made-this" href="https://made-this.app" target="_blank" rel="noopener" aria-label="made-this.app"><span>made-this</span></a>
 
     <script src="js/storage.js"></script>
     <script src="js/ble.js"></script>

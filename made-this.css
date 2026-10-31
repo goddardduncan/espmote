@@ -1,0 +1,232 @@
+/*
+ * Copied from growcube/style (ssh://git@10.7.0.1:2222/growcube/style.git) —
+ * change it there and copy it back.
+ *
+ * made-this.css — the house style that goes with the made-this badge.
+ *
+ * The badge is black and white: a #111 pill in a white ring, "made-this" in
+ * Inter Bold. Everything here keeps to that. Colour is only an accent, and
+ * every accent was checked by simulating protanopia, deuteranopia and
+ * tritanopia (Machado 2009) and measuring the gap in OKLab, so no two read as
+ * the same to a colour-blind reader. Each accent also clears 4.5:1 against
+ * its background, so it is safe for text. Even so, never let colour carry
+ * meaning alone: pair it with a word, an icon, a dash pattern or a marker.
+ *
+ * One family: Inter, the badge's face. Headings use its display cut (the
+ * opsz axis) at Black weight with tight tracking, so they read as the
+ * badge's lettering turned up. Numbers in tables and readouts use Inter's
+ * tabular figures (.mt-num, td, th), so columns line up without a monospace
+ * face and zero stays a plain zero. Not in prose: tnum widens hyphens.
+ * Only real code falls back to the system's monospace.
+ *
+ * Load the fonts once, before this file:
+ *   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&display=swap">
+ *
+ * Dark mode follows the system; force it with <html data-theme="dark"> or
+ * <html data-theme="light">.
+ */
+
+:root {
+  /* type */
+  --mt-font: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* code only */
+
+  /* the badge — the same in both themes */
+  --mt-badge-pill: #111111;
+  --mt-badge-ring: #ffffff;
+  --mt-badge-text: #ffffff;
+
+  /* neutrals (light) */
+  --mt-paper:   #f0f2f5;   /* made-this.app background */
+  --mt-surface: #ffffff;
+  --mt-ink:     #111111;   /* the badge's black */
+  --mt-ink-2:   #333333;   /* made-this.app text */
+  --mt-muted:   #5d636b;
+  --mt-rule:    #d5d9df;
+
+  /* accents (light) — blue, amber, magenta, then ink as a fourth series */
+  --mt-blue:    #0a5fb4;
+  --mt-amber:   #9a6200;
+  --mt-magenta: #b02a78;
+  --mt-series-4: #4a4f57;
+
+  /* status — blue not green for ok, so it never meets red */
+  --mt-ok:   #0a5fb4;
+  --mt-warn: #8f5f00;
+  --mt-bad:  #c0245c;
+
+  --mt-accent: var(--mt-blue);
+  --mt-radius: 10px;
+  --mt-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 14px rgba(0,0,0,.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --mt-paper:   #0e0f11;
+    --mt-surface: #17191c;
+    --mt-ink:     #f5f6f7;
+    --mt-ink-2:   #d6d9dd;
+    --mt-muted:   #9aa1aa;
+    --mt-rule:    #2b2f35;
+
+    --mt-blue:    #62a8f2;
+    --mt-amber:   #f2b13c;
+    --mt-magenta: #f07ab8;
+    --mt-series-4: #c2c7ce;
+
+    --mt-ok:   #62a8f2;
+    --mt-warn: #f2b13c;
+    --mt-bad:  #ff6b8e;
+
+    --mt-shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --mt-paper:   #0e0f11;
+  --mt-surface: #17191c;
+  --mt-ink:     #f5f6f7;
+  --mt-ink-2:   #d6d9dd;
+  --mt-muted:   #9aa1aa;
+  --mt-rule:    #2b2f35;
+
+  --mt-blue:    #62a8f2;
+  --mt-amber:   #f2b13c;
+  --mt-magenta: #f07ab8;
+  --mt-series-4: #c2c7ce;
+
+  --mt-ok:   #62a8f2;
+  --mt-warn: #f2b13c;
+  --mt-bad:  #ff6b8e;
+
+  --mt-shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+
+/* ---- base ---------------------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mt-paper);
+  color: var(--mt-ink-2);
+  font: 400 16px/1.55 var(--mt-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  color: var(--mt-ink);
+  font-weight: 800;
+  font-variation-settings: "opsz" 32;   /* Inter Display */
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 1.6em 0 .5em;
+}
+h1, h2 { font-weight: 900; letter-spacing: -0.045em; }
+h1 { font-size: clamp(2.2rem, 7vw, 3.4rem); line-height: .95; margin-top: 0; }
+h2 { font-size: clamp(1.5rem, 4vw, 2rem); line-height: 1; }
+h3 { font-size: 1.2rem; }
+h4 {
+  color: var(--mt-ink);
+  font-weight: 700;
+  letter-spacing: -0.02em;   /* as the badge */
+  line-height: 1.15;
+  margin: 1.6em 0 .5em;
+}
+h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); margin-top: 0; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+
+p, ul, ol { margin: 0 0 1em; }
+
+small, .mt-muted { color: var(--mt-muted); }
+
+/* links are underlined, so they never depend on colour */
+a { color: var(--mt-accent); text-decoration: underline; text-underline-offset: .18em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--mt-ink); outline-offset: 2px; border-radius: 4px; }
+
+code, kbd, pre, samp { font-family: var(--mt-mono); font-size: .9em; }
+pre { background: var(--mt-surface); border: 1px solid var(--mt-rule); border-radius: var(--mt-radius); padding: 12px 14px; overflow-x: auto; }
+.mt-num { font-variant-numeric: tabular-nums; }
+
+hr { border: 0; border-top: 1px solid var(--mt-rule); margin: 2em 0; }
+
+/* ---- layout -------------------------------------------------------------- */
+
+.mt-page { max-width: 960px; margin: 0 auto; padding: 32px 16px 96px; }
+
+.mt-card {
+  background: var(--mt-surface);
+  border: 1px solid var(--mt-rule);
+  border-radius: var(--mt-radius);
+  box-shadow: var(--mt-shadow);
+  padding: 18px 20px;
+}
+
+/* ---- tables -------------------------------------------------------------- */
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--mt-rule); }
+th { color: var(--mt-ink); font-weight: 700; border-bottom: 2px solid var(--mt-ink); }
+td, th { font-variant-numeric: tabular-nums; }
+td.mt-num, th.mt-num { text-align: right; }
+
+/* ---- buttons: the badge's pill shape ------------------------------------- */
+
+.mt-button {
+  display: inline-block;
+  padding: 8px 14px 9px;
+  border: 0; border-radius: 8px;
+  background: var(--mt-ink); color: var(--mt-paper);
+  font: 700 14px/1 var(--mt-font); letter-spacing: -0.02em;
+  text-decoration: none; cursor: pointer;
+}
+.mt-button:hover { transform: translateY(-1px); }
+.mt-button.is-quiet { background: transparent; color: var(--mt-ink); box-shadow: inset 0 0 0 1.5px var(--mt-ink); }
+
+/* ---- status: always colour plus a word or symbol -------------------------- */
+
+.mt-status {
+  display: inline-flex; align-items: center; gap: .4em;
+  font-weight: 600; font-size: .9rem;
+}
+.mt-status::before { font-weight: 700; }
+.mt-status.is-ok   { color: var(--mt-ok); }
+.mt-status.is-ok::before   { content: "✓"; }
+.mt-status.is-warn { color: var(--mt-warn); }
+.mt-status.is-warn::before { content: "!"; }
+.mt-status.is-bad  { color: var(--mt-bad); }
+.mt-status.is-bad::before  { content: "✕"; }
+
+/* ---- chart series: colour plus a dash pattern ----------------------------
+ * Use the variables in JS (getComputedStyle) or on SVG strokes. In charts,
+ * give each series its dash too, so lines read apart in greyscale. */
+
+.mt-s1 { color: var(--mt-blue);      --mt-dash: none; }
+.mt-s2 { color: var(--mt-amber);     --mt-dash: 6 3; }
+.mt-s3 { color: var(--mt-magenta);   --mt-dash: 2 3; }
+.mt-s4 { color: var(--mt-series-4);  --mt-dash: 8 3 2 3; }
+
+/* ---- the badge itself ------------------------------------------------------ */
+
+.made-this {
+  position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 2147483000;
+  display: block; padding: 3px;
+  background: var(--mt-badge-ring); border-radius: 11px; text-decoration: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 4px 14px rgba(0,0,0,.16);
+  transition: transform .15s ease;
+}
+.made-this:hover { transform: translateY(-1px); }
+.made-this span {
+  display: block; padding: 6px 10px 7px;
+  background: var(--mt-badge-pill); color: var(--mt-badge-text); border-radius: 8px;
+  font: 700 14px/1 var(--mt-font); letter-spacing: -0.02em;
+}
+.made-this.is-inline { position: static; display: inline-block; }
+
+@media print {
+  .made-this { display: none; }
+  body { background: #fff; color: #000; }
+}

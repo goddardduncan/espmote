@@ -1,30 +1,23 @@
-:root {
-    --google-blue: #4285f4;
-    --bg-gray: #f8f9fa;
-    --text-dark: #3c4043;
-    --card-bg: #ffffff;
-    --border-color: #dadce0;
-}
+/* House style comes from made-this.css (loaded first); this file only lays out the remote. */
 
 body {
-    background-color: var(--bg-gray);
-    font-family: "Segoe UI", system-ui, sans-serif;
-    margin: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: space-evenly;
     min-height: 100vh;
-    color: var(--text-dark);
+    padding-bottom: 56px; /* room for the made-this badge */
     overflow-y: auto;
     touch-action: none;
+    color-scheme: light dark;
 }
 
 .flex-center { display: flex; justify-content: center; align-items: center; }
 
 .header { text-align: center; padding-top: 20px; }
+.header h1 { margin: 0; }
 
-#status { font-size: 13px; color: #5f6368; margin-top: 4px; }
+#status { font-size: 13px; color: var(--mt-muted); margin-top: 6px; }
 
 .controls-wrapper { width: 85vw; max-width: 450px; }
 
@@ -32,36 +25,68 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 15px;
-    padding: 8px 16px;
-    background: #fff;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
+    margin-bottom: 10px;
+    padding: 10px 16px;
+    background: var(--mt-surface);
+    border-radius: var(--mt-radius);
+    border: 1px solid var(--mt-rule);
     font-size: 14px;
-    color: #5f6368;
+    color: var(--mt-ink-2);
 }
+.sensitivity-container label { white-space: nowrap; }
 
 #sensSlider, #scrollDecay, #scrollBoost {
-    flex-grow: 1;
-    accent-color: var(--google-blue);
+    flex: 1 1 0;
+    min-width: 0;
+    accent-color: var(--mt-ink);
     cursor: pointer;
 }
 
 #sensValue, #scrollDecayVal, #scrollBoostVal {
-    min-width: 25px;
-    font-family: monospace;
-    font-weight: bold;
-    color: var(--google-blue);
+    min-width: 40px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--mt-ink);
 }
 
+/* Invert mouse: a switch in the badge's ink */
+.toggle-row { justify-content: space-between; cursor: pointer; }
+.toggle-row input {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    width: 40px;
+    height: 24px;
+    margin: 0;
+    border-radius: 12px;
+    background: var(--mt-rule);
+    cursor: pointer;
+    transition: background .15s ease;
+}
+.toggle-row input::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--mt-surface);
+    box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    transition: transform .15s ease;
+}
+.toggle-row input:checked { background: var(--mt-ink); }
+.toggle-row input:checked::after { transform: translateX(16px); }
+
 #trackpad-card {
-    background: var(--card-bg);
+    background: var(--mt-surface);
     width: 85vw;
     max-width: 450px;
     height: 40vh;
-    border-radius: 28px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3);
+    border-radius: 18px;
+    border: 1px solid var(--mt-rule);
+    box-shadow: var(--mt-shadow);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -69,36 +94,41 @@ body {
     cursor: crosshair;
     transition: all 0.3s ease;
     position: relative;
+    color: var(--mt-muted);
 }
 
 #trackpad-card.active {
-    border: 2px solid var(--google-blue);
-    box-shadow: 0 8px 24px rgba(66, 133, 244, 0.15);
+    border: 2px solid var(--mt-ink);
+    color: var(--mt-ink);
     transform: scale(1.01);
 }
 
+/* Buttons: the badge's pill */
 .btn {
-    background: var(--google-blue);
-    color: white;
+    background: var(--mt-ink);
+    color: var(--mt-paper);
     border: none;
-    padding: 12px 24px;
-    border-radius: 24px;
-    font-weight: 500;
+    padding: 12px 22px 13px;
+    border-radius: 8px;
+    font: 700 15px/1 var(--mt-font);
+    letter-spacing: -0.02em;
     cursor: pointer;
-    transition: 0.2s;
+    transition: transform .15s ease;
 }
+.btn:hover { transform: translateY(-1px); }
+.btn.is-quiet { background: transparent; color: var(--mt-ink); box-shadow: inset 0 0 0 1.5px var(--mt-ink); }
 
-.btn-ota { background: #34a853; width: 100%; margin-top: 10px; }
-.btn-ota:disabled { background: #ccc; cursor: not-allowed; }
+.btn-ota { width: 100%; margin-top: 10px; }
+.btn-ota:disabled { background: var(--mt-rule); color: var(--mt-muted); cursor: not-allowed; transform: none; }
 
-#confirmBtn { background: #34a853; display: none; }
+#confirmBtn { display: none; }
 
 .key-container {
     display: flex;
     align-items: center;
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    background: var(--mt-surface);
+    border: 1px solid var(--mt-rule);
+    border-radius: var(--mt-radius);
     padding: 2px 10px;
     margin-bottom: 10px;
 }
@@ -108,9 +138,11 @@ body {
     padding: 8px;
     outline: none;
     text-align: center;
-    font-family: monospace;
+    font-family: var(--mt-mono);
     width: 160px;
     font-size: 14px;
+    background: transparent;
+    color: var(--mt-ink);
 }
 
 .toggle-pass { cursor: pointer; font-size: 18px; padding: 5px; }
@@ -119,10 +151,10 @@ body {
     position: absolute;
     bottom: 20px;
     font-size: 12px;
-    color: #70757a;
-    background: #f1f3f4;
+    color: var(--mt-ink-2);
+    background: var(--mt-paper);
     padding: 15px 20px;
-    border-radius: 12px;
+    border-radius: var(--mt-radius);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -135,23 +167,25 @@ body {
 #trackpad-card.active .shortcut-hint { opacity: 1; }
 
 .key-cap {
-    background: #fff;
-    border: 1px solid #bdc1c6;
+    background: var(--mt-surface);
+    color: var(--mt-ink);
+    border: 1px solid var(--mt-rule);
     border-bottom-width: 3px;
     padding: 2px 6px;
     border-radius: 4px;
-    font-weight: bold;
-    font-family: monospace;
+    font-weight: 700;
+    font-family: var(--mt-mono);
 }
 
 #ota-panel { margin-top: 15px; width: 85vw; max-width: 450px; text-align: center; display: none; }
-.ota-toggle, .reset-link { color: #5f6368; font-size: 12px; cursor: pointer; text-decoration: underline; display: block; }
-#ota-controls { display: none; background: #fff; padding: 15px; border-radius: 16px; border: 1px solid var(--border-color); flex-direction: column; gap: 8px; }
+.ota-toggle, .reset-link { color: var(--mt-muted); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: .18em; display: block; }
+.ota-toggle { margin-bottom: 8px; }
+#ota-controls { display: none; background: var(--mt-surface); padding: 15px; border-radius: var(--mt-radius); border: 1px solid var(--mt-rule); box-shadow: var(--mt-shadow); flex-direction: column; gap: 8px; }
 
-#fileList { max-height: 120px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #eee; border-radius: 8px; }
-.file-item { text-align: left; font-size: 13px; padding: 12px; cursor: pointer; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-.file-item.selected { background: #e8f0fe; font-weight: bold; color: var(--google-blue); border-left: 4px solid var(--google-blue); }
+#fileList { max-height: 120px; overflow-y: auto; margin-bottom: 10px; border: 1px solid var(--mt-rule); border-radius: 8px; }
+.file-item { text-align: left; font-size: 13px; padding: 12px; cursor: pointer; background: var(--mt-surface); border-bottom: 1px solid var(--mt-rule); display: flex; justify-content: space-between; }
+.file-item.selected { background: var(--mt-paper); font-weight: 700; color: var(--mt-ink); box-shadow: inset 4px 0 0 var(--mt-ink); }
 
-.progress-bar { width: 100%; height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; margin: 10px 0; display: none; }
-.progress-fill { height: 100%; background: var(--google-blue); width: 0%; transition: width 0.1s; }
-#otaStatus { font-size: 11px; color: #5f6368; margin-top: 5px; }
+.progress-bar { width: 100%; height: 6px; background: var(--mt-rule); border-radius: 3px; overflow: hidden; margin: 10px 0; display: none; }
+.progress-fill { height: 100%; background: var(--mt-ink); width: 0%; transition: width 0.1s; }
+#otaStatus { font-size: 11px; color: var(--mt-muted); margin-top: 5px; font-variant-numeric: tabular-nums; }

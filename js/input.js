@@ -2,6 +2,7 @@
 let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
 let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
 let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
+let invertMouse = localStorage.getItem("invertMouse") === "true";
 
 let lastMoveTime = performance.now();
 let smoothX = 0, smoothY = 0;
@@ -147,7 +148,7 @@ document.addEventListener("mousemove", (e) => {
     lastMoveTime = now;
 
     const rawX = e.movementX;
-    const rawY = e.movementY;
+    const rawY = invertMouse ? -e.movementY : e.movementY;
 
     const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
 
