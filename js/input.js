@@ -2,7 +2,7 @@
 let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
 let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
 let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
-let invertMouse = localStorage.getItem("invertMouse") === "true";
+let invertScroll = localStorage.getItem("invertScroll") === "true";
 
 let lastMoveTime = performance.now();
 let smoothX = 0, smoothY = 0;
@@ -148,7 +148,7 @@ document.addEventListener("mousemove", (e) => {
     lastMoveTime = now;
 
     const rawX = e.movementX;
-    const rawY = invertMouse ? -e.movementY : e.movementY;
+    const rawY = e.movementY;
 
     const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
 
@@ -212,7 +212,7 @@ document.addEventListener("wheel", (e) => {
 
     steps = Math.min(steps, SCROLL.maxSteps);
 
-    const direction = delta > 0 ? -1 : 1;
+    const direction = (delta > 0 ? -1 : 1) * (invertScroll ? -1 : 1);
     scrollRemainder -= steps * Math.sign(scrollRemainder);
 
     for (let i = 0; i < steps; i++)

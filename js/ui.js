@@ -30,8 +30,8 @@ function loadSettingsFromStorage() {
         document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
     }
 
-    // Invert Mouse
-    document.getElementById("invertMouse").checked = invertMouse;
+    // Invert Scroll
+    document.getElementById("invertScroll").checked = invertScroll;
 }
 
 window.onload = async () => {
@@ -109,9 +109,9 @@ function initUIListeners() {
         localStorage.setItem("scrollBoost", scrollBoost);
     };
 
-    document.getElementById("invertMouse").onchange = (e) => {
-        invertMouse = e.target.checked;
-        localStorage.setItem("invertMouse", invertMouse);
+    document.getElementById("invertScroll").onchange = (e) => {
+        invertScroll = e.target.checked;
+        localStorage.setItem("invertScroll", invertScroll);
     };
 
     // --- Key Management ---

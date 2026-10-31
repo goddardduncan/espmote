@@ -69,7 +69,7 @@ body {
     color: var(--mt-ink);
 }
 
-/* Invert mouse: a switch in the badge's ink */
+/* Invert scroll: a switch in the badge's ink */
 .toggle-row { justify-content: space-between; cursor: pointer; }
 .toggle-row input {
     appearance: none;
