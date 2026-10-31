@@ -17,6 +17,25 @@ body {
 .header { text-align: center; padding-top: 20px; }
 .header h1 { margin: 0; }
 
+/* The title matches the mote-mote pill on index.html: the made-this badge, turned up */
+.title-pill {
+    display: inline-block;
+    padding: 4px;
+    background: var(--mt-badge-ring);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 6px 20px rgba(0,0,0,.18);
+}
+.title-pill span {
+    display: block;
+    padding: 14px 22px 16px;
+    background: var(--mt-badge-pill);
+    color: var(--mt-badge-text);
+    border-radius: 12px;
+    font: 800 30px/1 var(--mt-font);
+    font-variation-settings: normal;
+    letter-spacing: -.02em;
+}
+
 #status { font-size: 13px; color: var(--mt-muted); margin-top: 6px; }
 
 .controls-wrapper { width: 85vw; max-width: 450px; }
