@@ -4,8 +4,8 @@ let scrollDecay = 0.95;
 let scrollBoost = 1.4;
 let invertScroll = false;
 
-let lastMoveTime = performance.now();
-let smoothX = 0, smoothY = 0;
+let lastMoveTime = 0;
+let moveSpeed = 0; // px/ms, averaged over time
 let moveRemX = 0, moveRemY = 0;
 let scrollRemainder = 0, lastScrollTime = 0;
 let tickCount = 0, tickTime;
@@ -16,7 +16,7 @@ const DOUBLE_TAP_DELAY = 500;
 const BURST_DELAY = 30; // HID stability (firmware queues packets, so this can be short)
 
 // Constants for behavior
-const TRACKPAD = { smoothing: 0.35, gestureGap: 60, curveMid: 0.08, curveSharpness: 10 };
+const TRACKPAD = { speedWindow: 40, gestureGap: 60, frame: 16, spike: 500, curveMid: 0.08, curveSharpness: 10 };
 const SCROLL = { scale: 0.02, minStep: 0.05, maxSteps: 6 };
 
 // Shift-required symbol map (US layout)
@@ -145,33 +145,41 @@ document.addEventListener("mousemove", (e) => {
     const card = document.getElementById("trackpad-card");
     if (document.pointerLockElement !== card) return;
 
-    const now = performance.now();
-    const dt = Math.max(now - lastMoveTime, 1);
+    const [outX, outY] = pointerStep(e.movementX, e.movementY, e.timeStamp);
+    if (outX || outY) addMotion(outX, outY);
+});
+
+// Turns one movement into whole pixels for the target. Every pixel of input goes out (no
+// smoothing to hold any back), and the gain depends on speed averaged over time, so the
+// same finger speed gets the same gain however the browser happens to batch the events.
+function pointerStep(rawX, rawY, now) {
+    // Chrome can report a screen-sized jump as the pointer lock engages; no real swipe does that
+    if (Math.abs(rawX) > TRACKPAD.spike || Math.abs(rawY) > TRACKPAD.spike) return [0, 0];
+
+    let dt = now - lastMoveTime;
     lastMoveTime = now;
+    const dist = Math.sqrt(rawX * rawX + rawY * rawY);
 
-    // A new gesture starts fresh, so the last swipe's velocity doesn't bleed into it
-    if (dt > TRACKPAD.gestureGap) smoothX = smoothY = moveRemX = moveRemY = 0;
+    if (dt > TRACKPAD.gestureGap) {
+        // A new gesture: judge its speed from this first event alone, not from the pause before it
+        moveSpeed = dist / TRACKPAD.frame;
+    } else {
+        dt = Math.max(dt, 1);
+        const weight = 1 - Math.exp(-dt / TRACKPAD.speedWindow);
+        moveSpeed += (dist / dt - moveSpeed) * weight;
+    }
 
-    const rawX = e.movementX;
-    const rawY = e.movementY;
-
-    const speed = Math.sqrt(rawX * rawX + rawY * rawY) / dt;
-
-    smoothX = smoothX * TRACKPAD.smoothing + rawX * (1 - TRACKPAD.smoothing);
-    smoothY = smoothY * TRACKPAD.smoothing + rawY * (1 - TRACKPAD.smoothing);
-
-    const accel = accelCurve(speed);
+    const gain = accelCurve(moveSpeed) * mouseSensitivity;
 
     // Whole pixels go out; the fraction carries over so slow, precise moves aren't rounded away
-    moveRemX += smoothX * accel * mouseSensitivity;
-    moveRemY += smoothY * accel * mouseSensitivity;
+    moveRemX += rawX * gain;
+    moveRemY += rawY * gain;
     const outX = Math.trunc(moveRemX);
     const outY = Math.trunc(moveRemY);
     moveRemX -= outX;
     moveRemY -= outY;
-
-    if (outX || outY) addMotion(outX, outY);
-});
+    return [outX, outY];
+}
 
 
 
