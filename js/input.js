@@ -1,8 +1,8 @@
-// Local variables for mouse and scroll state
-let mouseSensitivity = parseFloat(localStorage.getItem("mouseSensitivity")) || 2.0;
-let scrollDecay = parseFloat(localStorage.getItem("scrollDecay")) || 0.95;
-let scrollBoost = parseFloat(localStorage.getItem("scrollBoost")) || 1.4;
-let invertScroll = localStorage.getItem("invertScroll") === "true";
+// Local variables for mouse and scroll state (ui.js loads the saved values)
+let mouseSensitivity = 2.0;
+let scrollDecay = 0.95;
+let scrollBoost = 1.4;
+let invertScroll = false;
 
 let lastMoveTime = performance.now();
 let smoothX = 0, smoothY = 0;
@@ -388,10 +388,14 @@ document.addEventListener("pointerlockchange", () => {
 // ================= SCROLL DECAY ======================
 // =====================================================
 
+// Once scrolling pauses, leftover part-ticks fade by scrollDecay every 16ms
+let lastDecayFrame = performance.now();
+
 function decayScrollRemainder() {
     const now = performance.now();
+    const dt = now - lastDecayFrame;
+    lastDecayFrame = now;
     if (now - lastScrollTime > 40 && scrollRemainder !== 0) {
-        const dt = now - lastScrollTime;
         scrollRemainder *= Math.pow(scrollDecay, dt / 16);
         if (Math.abs(scrollRemainder) < 0.01)
             scrollRemainder = 0;

@@ -5,34 +5,53 @@ let bleDevice = null;
 let reconnecting = false;
 let selectedFileArray = null;
 
-function loadSettingsFromStorage() {
-    // Mouse Sensitivity
-    const savedSens = localStorage.getItem("mouseSensitivity");
-    if (savedSens) {
-        mouseSensitivity = parseFloat(savedSens);
-        document.getElementById("sensSlider").value = mouseSensitivity;
-        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
-    }
+// --- Settings: restored from localStorage and saved on every change ---
+// Runs as soon as the script loads, so it never waits on the page's fonts or the key lookup
+const SLIDERS = [
+    { id: "sensSlider",  out: "sensValue",      key: "mouseSensitivity", digits: 1, set: v => mouseSensitivity = v },
+    { id: "scrollDecay", out: "scrollDecayVal", key: "scrollDecay",      digits: 2, set: v => scrollDecay = v },
+    { id: "scrollBoost", out: "scrollBoostVal", key: "scrollBoost",      digits: 1, set: v => scrollBoost = v },
+];
 
-    // Scroll Decay
-    const savedDecay = localStorage.getItem("scrollDecay");
-    if (savedDecay) {
-        scrollDecay = parseFloat(savedDecay);
-        document.getElementById("scrollDecay").value = scrollDecay;
-        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
-    }
-
-    // Scroll Boost
-    const savedBoost = localStorage.getItem("scrollBoost");
-    if (savedBoost) {
-        scrollBoost = parseFloat(savedBoost);
-        document.getElementById("scrollBoost").value = scrollBoost;
-        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
-    }
-
-    // Invert Scroll
-    document.getElementById("invertScroll").checked = invertScroll;
+// localStorage can throw when site data is blocked; the settings then just last for the visit
+function loadSetting(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
 }
+
+function saveSetting(key, value) {
+    try { localStorage.setItem(key, value); } catch {}
+}
+
+function initSettings() {
+    SLIDERS.forEach(({ id, out, key, digits, set }) => {
+        const slider = document.getElementById(id);
+        const show = (v) => {
+            set(v);
+            document.getElementById(out).innerText = v.toFixed(digits);
+        };
+
+        const saved = parseFloat(loadSetting(key));
+        if (!isNaN(saved)) {
+            slider.value = saved;
+            show(saved);
+        }
+
+        slider.addEventListener("input", () => {
+            const v = parseFloat(slider.value);
+            show(v);
+            saveSetting(key, v);
+        });
+    });
+
+    const invert = document.getElementById("invertScroll");
+    invertScroll = invert.checked = loadSetting("invertScroll") === "true";
+    invert.addEventListener("change", () => {
+        invertScroll = invert.checked;
+        saveSetting("invertScroll", invertScroll);
+    });
+}
+
+initSettings();
 
 window.onload = async () => {
     // 1. Check for saved keys in IndexedDB
@@ -47,7 +66,6 @@ window.onload = async () => {
     
     // 2. Initialize all interactive UI elements
     initUIListeners();
-    loadSettingsFromStorage();
 };
 
 function initUIListeners() {
@@ -85,33 +103,6 @@ function initUIListeners() {
             console.error(e);
             document.getElementById("status").innerText = "Error: " + e.message;
         }
-    };
-
-    // --- Sliders (Mouse & Scroll) ---
-    const s = document.getElementById("sensSlider");
-    s.oninput = (e) => {
-        mouseSensitivity = parseFloat(e.target.value);
-        document.getElementById("sensValue").innerText = mouseSensitivity.toFixed(1);
-        localStorage.setItem("mouseSensitivity", mouseSensitivity);
-    };
-
-    const d = document.getElementById("scrollDecay");
-    d.oninput = (e) => {
-        scrollDecay = parseFloat(e.target.value);
-        document.getElementById("scrollDecayVal").innerText = scrollDecay.toFixed(3);
-        localStorage.setItem("scrollDecay", scrollDecay);
-    };
-
-    const b = document.getElementById("scrollBoost");
-    b.oninput = (e) => {
-        scrollBoost = parseFloat(e.target.value);
-        document.getElementById("scrollBoostVal").innerText = scrollBoost.toFixed(1);
-        localStorage.setItem("scrollBoost", scrollBoost);
-    };
-
-    document.getElementById("invertScroll").onchange = (e) => {
-        invertScroll = e.target.checked;
-        localStorage.setItem("invertScroll", invertScroll);
     };
 
     // --- Key Management ---
